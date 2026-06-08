@@ -1,0 +1,176 @@
+[
+  {
+    "query": "  Nike Air Max 270  ",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000011"
+    ],
+    "description": "Whitespace-trimmed exact footwear name match"
+  },
+  {
+    "query": "Sony WH-1000XM5 Wireless Headphones",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000001"
+    ],
+    "description": "Exact electronics product name match"
+  },
+  {
+    "query": "bose quietcomfort ultra headphones",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000002"
+    ],
+    "description": "Lowercase exact name match"
+  },
+  {
+    "query": "Apple AirPods Pro 2",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000003"
+    ],
+    "description": "Exact earbuds product query"
+  },
+  {
+    "query": "Dell XPS 13 Laptop",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000008"
+    ],
+    "description": "Exact laptop name match"
+  },
+  {
+    "query": "Adidas Ultraboost Light",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000013"
+    ],
+    "description": "Exact footwear query for a high-rated running shoe"
+  },
+  {
+    "query": "Asics Gel-Kayano 31",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000017"
+    ],
+    "description": "Exact stability running shoe query"
+  },
+  {
+    "query": "Nike Dri-FIT Legend Tee",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000021"
+    ],
+    "description": "Exact clothing product query"
+  },
+  {
+    "query": "Levi's 501 Original Jeans",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000026"
+    ],
+    "description": "Exact denim product query"
+  },
+  {
+    "query": "NINJA PROFESSIONAL PLUS BLENDER",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000031"
+    ],
+    "description": "Uppercase exact kitchen name match"
+  },
+  {
+    "query": "Vitamix Explorian E310 Blender",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000032"
+    ],
+    "description": "Exact premium blender query"
+  },
+  {
+    "query": "Instant Pot Duo 7-in-1 Cooker",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000033"
+    ],
+    "description": "Exact multicooker product query"
+  },
+  {
+    "query": "KitchenAid Artisan Stand Mixer",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000035"
+    ],
+    "description": "Exact mixer product query"
+  },
+  {
+    "query": "Fitbit Charge 6 Fitness Tracker",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000041"
+    ],
+    "description": "Exact fitness tracker query"
+  },
+  {
+    "query": "Garmin Forerunner 265",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000042"
+    ],
+    "description": "Exact GPS running watch query"
+  },
+  {
+    "query": "Bowflex SelectTech 552 Dumbbells",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000043"
+    ],
+    "description": "Exact strength equipment query"
+  },
+  {
+    "query": "Theragun Prime Massage Gun",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000045"
+    ],
+    "description": "Exact recovery device query"
+  },
+  {
+    "query": "Manduka Pro Yoga Mat",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000049"
+    ],
+    "description": "Exact yoga product query"
+  },
+  {
+    "query": "Hyperice Hypervolt Go 2",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000050"
+    ],
+    "description": "Exact portable recovery device query"
+  },
+  {
+    "query": "wireless headphones",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000001",
+      "00000000-0000-0000-0000-000000000002"
+    ],
+    "description": "Two premium headphone products should both land in the top 3"
+  },
+  {
+    "query": "blender",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000031",
+      "00000000-0000-0000-0000-000000000032",
+      "00000000-0000-0000-0000-000000000040"
+    ],
+    "description": "All three blender SKUs should appear in the top 3"
+  },
+  {
+    "query": "massage gun",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000045",
+      "00000000-0000-0000-0000-000000000050"
+    ],
+    "description": "Both recovery massage guns should appear in the top 3"
+  },
+  {
+    "query": "yoga mat",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000046",
+      "00000000-0000-0000-0000-000000000049"
+    ],
+    "description": "Both yoga mat products should appear in the top 3"
+  },
+  {
+    "query": "cuisinart",
+    "expected_top3_ids": [
+      "00000000-0000-0000-0000-000000000034",
+      "00000000-0000-0000-0000-000000000039"
+    ],
+    "description": "Both Cuisinart products should rank inside the top 3"
+  }
+]
