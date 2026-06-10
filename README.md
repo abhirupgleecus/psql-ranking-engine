@@ -39,10 +39,10 @@ Implemented today:
 
 - FastAPI service with `/health` and `/search`
 - async PostgreSQL access with SQLAlchemy 2.x
-- Alembic migrations
+- parallel read-only database model (`ProductMaster`)
 - deterministic rule-based scorer
-- seed dataset with 50 realistic products
-- evaluation harness with 24 top-3 relevance cases
+- restored database table (`product_master`) containing realistic enterprise IT assets (printers, laptops, monitors)
+- evaluation harness with 12 top-3 relevance cases targeting real enterprise asset UUIDs
 
 Planned later:
 
@@ -77,13 +77,12 @@ Signals include:
 - brand contains query
 - exact category match
 - category contains query
-- exact tag match
-- tag contains query
-- description contains query
-- boost for high rating
-- boost for high review count
-- boost for in-stock items
-- penalty for out-of-stock items
+- type contains query
+- sub_category contains query
+- model_number contains query
+- certification exact match
+- hazardous material contains query
+- boost for high repairability (`repairability_score >= 0.75`)
 
 The score breakdown is returned in the API response so callers can see why each result ranked where it did.
 
@@ -196,43 +195,70 @@ Query params:
 - `top_n` optional, default `10`, max `100`
 - `min_score` optional, default `1`
 - `category` optional category prefilter
-- `in_stock_only` optional boolean prefilter
-
-Example:
 
 ```text
-GET /search?q=blender&top_n=3&in_stock_only=true
+GET /search?q=HP+DesignJet+Z9%2B+Pro+64-in+Printer&top_n=3
 ```
 
 Response shape:
 
 ```json
 {
-  "query": "blender",
-  "total_candidates": 50,
-  "results_returned": 3,
+  "query": "HP DesignJet Z9+ Pro 64-in Printer",
+  "total_candidates": 15,
+  "results_returned": 1,
   "results": [
     {
-      "id": "00000000-0000-0000-0000-000000000031",
-      "name": "Ninja Professional Plus Blender",
-      "brand": "Ninja",
-      "category": "kitchen",
-      "tags": ["blender", "smoothie", "countertop", "ice crushing"],
-      "description": "Powerful blender that handles frozen fruit, soups, and quick weekday smoothies.",
-      "price": 119.99,
-      "rating": 4.70,
-      "review_count": 410,
-      "in_stock": true,
-      "created_at": "2026-06-08T00:00:00Z",
-      "total_score": 86,
+      "uuid": "2f61910e-6656-4bb0-8995-ad10a2d17b25",
+      "status": "ACTIVE",
+      "type": "Large-format Printer",
+      "name": "HP DesignJet Z9+ Pro 64-in Printer",
+      "category": "Electronics",
+      "sub_category": "Printers & Imaging Equipment",
+      "brand": "HP",
+      "manufacturer": {
+        "name": "HP Inc.",
+        "support_url": "https://support.hp.com"
+      },
+      "upc": "196068222851",
+      "variant": "Standard",
+      "model_number": "Z9+",
+      "serial_number": "MXL9876543",
+      "model_year": 2023,
+      "weight_lb": 120.0,
+      "weight_kg": 54.4,
+      "dimensions_inches": "64.0 x 28.0 x 48.0",
+      "repairability_score": 8.5,
+      "disassembly_complexity": "MEDIUM",
+      "average_life_span_years": 8,
+      "energy_efficiency_rating": "Energy Star",
+      "authorized_needed": false,
+      "special_handling_required": false,
+      "contains_user_data": true,
+      "mandatory_data_wipe_needed": true,
+      "required_certifications": ["Energy Star", "EPEAT Gold"],
+      "market_value": {
+        "currency": "USD",
+        "current_market_value": 4999.0
+      },
+      "market_value_avgs": {
+        "avg_refurbished_price": 3999.0
+      },
+      "hazardous_materials": [],
+      "created_at": "2026-06-10T11:23:21Z",
+      "updated_at": "2026-06-10T11:23:21Z",
+      "goods_type": "SMALL_WHITE_GOODS",
+      "total_score": 118,
       "score_breakdown": {
+        "exact_name_match": 100,
+        "name_starts_with_query": 80,
         "name_whole_word_match": 60,
         "name_contains_query": 40,
-        "tag_exact_match": 20,
-        "tag_contains_query": 10,
-        "boost_high_rating": 8,
-        "boost_high_review_count": 5,
-        "boost_in_stock": 3
+        "exact_brand_match": 50,
+        "brand_contains_query": 25,
+        "exact_category_match": 30,
+        "category_contains_query": 15,
+        "boost_high_repairability": 8
       }
     }
   ]
@@ -271,8 +297,8 @@ What the eval does:
 
 Current verified result:
 
-- `24/24` cases passed
-- `100.0%` top-3 accuracy against the seeded benchmark
+- `12/12` cases passed
+- `100.0%` top-3 accuracy against the restored product_master benchmark
 
 Important interpretation:
 
@@ -329,14 +355,16 @@ How:
 
 The scorer expects fields equivalent to:
 
+- `uuid`
+- `status` (pre-filtered to ACTIVE in SQL)
+- `type`
 - `name`
-- `brand`
 - `category`
-- `tags`
-- `description`
-- `rating`
-- `review_count`
-- `in_stock`
+- `sub_category`
+- `brand`
+- `required_certifications`
+- `hazardous_materials`
+- `repairability_score`
 
 ### Integration Checklist
 
