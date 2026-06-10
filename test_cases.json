@@ -1,176 +1,86 @@
 [
   {
-    "query": "  Nike Air Max 270  ",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000011"
+    "query": "  HP DesignJet Z9+ Pro 64-in Printer  ",
+    "expected_top3_uuids": [
+      "2f61910e-6656-4bb0-8995-ad10a2d17b25"
     ],
-    "description": "Whitespace-trimmed exact footwear name match"
+    "description": "Whitespace-trimmed exact large-format printer name match"
   },
   {
-    "query": "Sony WH-1000XM5 Wireless Headphones",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000001"
+    "query": "hp neverstop laser 1000n monochrome laser printer",
+    "expected_top3_uuids": [
+      "8748b1b5-f2f7-46b7-b417-5b7522e52020"
     ],
-    "description": "Exact electronics product name match"
+    "description": "Lowercase exact monochrome printer query"
   },
   {
-    "query": "bose quietcomfort ultra headphones",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000002"
+    "query": "HP DesignJet Studio Steel 24-in Large Format Wireless Plotter Printer",
+    "expected_top3_uuids": [
+      "d659a888-1afe-411d-b8da-d6889263eac6"
     ],
-    "description": "Lowercase exact name match"
+    "description": "Exact wireless plotter printer query"
   },
   {
-    "query": "Apple AirPods Pro 2",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000003"
+    "query": "HP DesignJet T230 24-in Large Format Plotter Printer",
+    "expected_top3_uuids": [
+      "0d6f7ce6-6004-47db-98ce-fea7de4fe9cc"
     ],
-    "description": "Exact earbuds product query"
+    "description": "Exact DesignJet plotter query"
   },
   {
-    "query": "Dell XPS 13 Laptop",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000008"
+    "query": "HP Pavilion 15 Laptop (15-eg0050wm)",
+    "expected_top3_uuids": [
+      "31599cae-55c1-463a-b256-80f1b5fcd041"
     ],
-    "description": "Exact laptop name match"
+    "description": "Exact Pavilion laptop name match"
   },
   {
-    "query": "Adidas Ultraboost Light",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000013"
+    "query": "HP Laptop 15-dw Series",
+    "expected_top3_uuids": [
+      "86e72716-2151-47d7-91e9-d0fe73988790"
     ],
-    "description": "Exact footwear query for a high-rated running shoe"
+    "description": "Exact HP laptop series query"
   },
   {
-    "query": "Asics Gel-Kayano 31",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000017"
+    "query": "HP Color LaserJet Pro 4201dw Wireless Color Laser Printer",
+    "expected_top3_uuids": [
+      "b9ca619c-1828-4593-900c-582d17720457"
     ],
-    "description": "Exact stability running shoe query"
+    "description": "Exact wireless color LaserJet query"
   },
   {
-    "query": "Nike Dri-FIT Legend Tee",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000021"
+    "query": "HP M27h FHD Monitor",
+    "expected_top3_uuids": [
+      "17942b12-b1cb-49b9-a48a-95876935a878"
     ],
-    "description": "Exact clothing product query"
+    "description": "Exact monitor product query"
   },
   {
-    "query": "Levi's 501 Original Jeans",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000026"
+    "query": "HP Z2 G9 Small Form Factor Workstation",
+    "expected_top3_uuids": [
+      "0e735249-018d-4e5b-8059-243d897556de"
     ],
-    "description": "Exact denim product query"
+    "description": "Exact workstation query"
   },
   {
-    "query": "NINJA PROFESSIONAL PLUS BLENDER",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000031"
+    "query": "HP LaserJet M110we Wireless Black & White Laser Printer",
+    "expected_top3_uuids": [
+      "384d4294-185b-4615-8437-c085b70cdf07"
     ],
-    "description": "Uppercase exact kitchen name match"
+    "description": "Exact wireless black-and-white printer query"
   },
   {
-    "query": "Vitamix Explorian E310 Blender",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000032"
+    "query": "HP Victus 15.6\" Gaming Laptop (AMD Ryzen 5 7535HS, RTX 2050, 8GB RAM, 512GB SSD)",
+    "expected_top3_uuids": [
+      "409b2eab-ec5b-4f3f-957a-9292e83b731f"
     ],
-    "description": "Exact premium blender query"
+    "description": "Exact gaming laptop query"
   },
   {
-    "query": "Instant Pot Duo 7-in-1 Cooker",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000033"
+    "query": "hp all-in-one 24 desktop pc a24hta",
+    "expected_top3_uuids": [
+      "0a5c613b-b296-451d-9fe4-e0a3c3b042a1"
     ],
-    "description": "Exact multicooker product query"
-  },
-  {
-    "query": "KitchenAid Artisan Stand Mixer",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000035"
-    ],
-    "description": "Exact mixer product query"
-  },
-  {
-    "query": "Fitbit Charge 6 Fitness Tracker",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000041"
-    ],
-    "description": "Exact fitness tracker query"
-  },
-  {
-    "query": "Garmin Forerunner 265",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000042"
-    ],
-    "description": "Exact GPS running watch query"
-  },
-  {
-    "query": "Bowflex SelectTech 552 Dumbbells",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000043"
-    ],
-    "description": "Exact strength equipment query"
-  },
-  {
-    "query": "Theragun Prime Massage Gun",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000045"
-    ],
-    "description": "Exact recovery device query"
-  },
-  {
-    "query": "Manduka Pro Yoga Mat",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000049"
-    ],
-    "description": "Exact yoga product query"
-  },
-  {
-    "query": "Hyperice Hypervolt Go 2",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000050"
-    ],
-    "description": "Exact portable recovery device query"
-  },
-  {
-    "query": "wireless headphones",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000001",
-      "00000000-0000-0000-0000-000000000002"
-    ],
-    "description": "Two premium headphone products should both land in the top 3"
-  },
-  {
-    "query": "blender",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000031",
-      "00000000-0000-0000-0000-000000000032",
-      "00000000-0000-0000-0000-000000000040"
-    ],
-    "description": "All three blender SKUs should appear in the top 3"
-  },
-  {
-    "query": "massage gun",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000045",
-      "00000000-0000-0000-0000-000000000050"
-    ],
-    "description": "Both recovery massage guns should appear in the top 3"
-  },
-  {
-    "query": "yoga mat",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000046",
-      "00000000-0000-0000-0000-000000000049"
-    ],
-    "description": "Both yoga mat products should appear in the top 3"
-  },
-  {
-    "query": "cuisinart",
-    "expected_top3_ids": [
-      "00000000-0000-0000-0000-000000000034",
-      "00000000-0000-0000-0000-000000000039"
-    ],
-    "description": "Both Cuisinart products should rank inside the top 3"
+    "description": "Lowercase exact all-in-one desktop query"
   }
 ]

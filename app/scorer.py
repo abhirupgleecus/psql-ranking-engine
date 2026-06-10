@@ -10,35 +10,54 @@ SIGNAL_WEIGHTS = {
     "brand_contains_query": 25,
     "exact_category_match": 30,
     "category_contains_query": 15,
-    "tag_exact_match": 20,
-    "tag_contains_query": 10,
-    "description_contains_query": 5,
-    "boost_high_rating": 8,
-    "boost_high_review_count": 5,
-    "boost_in_stock": 3,
-    "penalty_out_of_stock": -10,
+    "type_contains_query": 5,
+    "sub_category_contains_query": 10,
+    "model_number_contains_query": 10,
+    "certification_exact_match": 20,
+    "hazardous_material_contains_query": 10,
+    "boost_high_repairability": 8,
 }
 
 
-def score_product(product: dict, query: str) -> tuple[int, dict]:
-    query = query.strip().lower()
+def normalize_text(value: object) -> str:
+    return str(value or "").strip().lower()
 
+
+def contains_whole_word(query: str, haystack: str) -> bool:
+    if not haystack:
+        return False
+
+    return bool(re.search(rf"\b{re.escape(query)}\b", haystack))
+
+
+def score_product(product: dict, query: str) -> tuple[int, dict[str, int]]:
+    query = normalize_text(query)
     score = 0
     breakdown: dict[str, int] = {}
 
-    name = str(product.get("name", "")).lower()
-    brand = str(product.get("brand", "")).lower()
-    category = str(product.get("category", "")).lower()
-    description = str(product.get("description", "")).lower()
+    if not query:
+        return score, breakdown
 
-    tags = [
-        str(tag).lower()
-        for tag in product.get("tags", [])
+    name = normalize_text(product.get("name"))
+    brand = normalize_text(product.get("brand"))
+    category = normalize_text(product.get("category"))
+    product_type = normalize_text(product.get("type"))
+    sub_category = normalize_text(product.get("sub_category"))
+    model_number = normalize_text(product.get("model_number"))
+
+    required_certifications = [
+        normalize_text(certification)
+        for certification in product.get("required_certifications", [])
+        if certification is not None
+    ]
+    hazardous_materials = [
+        normalize_text(material)
+        for material in product.get("hazardous_materials", [])
+        if material is not None
     ]
 
-    rating = product.get("rating")
-    review_count = product.get("review_count", 0)
-    in_stock = product.get("in_stock", False)
+    repairability_score = product.get("repairability_score")
+
 
     def add_signal(signal_name: str):
         nonlocal score
@@ -47,21 +66,17 @@ def score_product(product: dict, query: str) -> tuple[int, dict]:
         score += points
         breakdown[signal_name] = points
 
-    # Name signals
-
     if query == name:
         add_signal("exact_name_match")
 
     if name.startswith(query):
         add_signal("name_starts_with_query")
 
-    if re.search(rf"\b{re.escape(query)}\b", name):
+    if contains_whole_word(query, name):
         add_signal("name_whole_word_match")
 
     if query in name:
         add_signal("name_contains_query")
-
-    # Brand signals
 
     if query == brand:
         add_signal("exact_brand_match")
@@ -69,38 +84,28 @@ def score_product(product: dict, query: str) -> tuple[int, dict]:
     if query in brand:
         add_signal("brand_contains_query")
 
-    # Category signals
-
     if query == category:
         add_signal("exact_category_match")
 
     if query in category:
         add_signal("category_contains_query")
 
-    # Tag signals
+    if query in product_type:
+        add_signal("type_contains_query")
 
-    if any(query == tag for tag in tags):
-        add_signal("tag_exact_match")
+    if query in sub_category:
+        add_signal("sub_category_contains_query")
 
-    if any(query in tag for tag in tags):
-        add_signal("tag_contains_query")
+    if query in model_number:
+        add_signal("model_number_contains_query")
 
-    # Description
+    if any(query == certification for certification in required_certifications):
+        add_signal("certification_exact_match")
 
-    if query in description:
-        add_signal("description_contains_query")
+    if any(query in material for material in hazardous_materials):
+        add_signal("hazardous_material_contains_query")
 
-    # Boosts
-
-    if rating is not None and float(rating) >= 4.5:
-        add_signal("boost_high_rating")
-
-    if review_count >= 100:
-        add_signal("boost_high_review_count")
-
-    if in_stock:
-        add_signal("boost_in_stock")
-    else:
-        add_signal("penalty_out_of_stock")
+    if repairability_score is not None and float(repairability_score) >= 0.75:
+        add_signal("boost_high_repairability")
 
     return score, breakdown

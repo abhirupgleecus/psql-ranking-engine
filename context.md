@@ -9,19 +9,17 @@
 - Ranking is performed in Python by `app/scorer.py`.
 - The schema already includes a few future-facing indexes for later Stage 2 and Stage 3 work.
 
-As of June 8, 2026, Phases 1 through 7 are implemented.
+As of June 10, 2026, Phase 1 of the ProductMaster search migration is completed. Phase 2 (full-text + wildcard search) comes later.
 
 ## Current Status
 
-### Completed phases
+### Completed Phases (Phase 1)
 
-1. Project scaffolding and environment setup
-2. Async database wiring and health check
-3. `products` schema and Alembic migrations
-4. Search request/response schemas
-5. Deterministic Stage 1 scoring engine
-6. `/search` endpoint with DB candidate fetch plus Python ranking
-7. Deterministic seed data and evaluation harness
+1. **Parallel database model**: Added read-only `ProductMaster` ORM model backed by `product_master` table.
+2. **Schema reshaping**: Created `RankedProductMaster` response and `ScoreBreakdown` models; simplified `SearchRequest` to remove status parameters/filters.
+3. **Scorer rewrite**: Retuned scoring signals around `ProductMaster` properties and removed status signals (only `ACTIVE` products are displayed/searched).
+4. **Search path migration**: Modified `/search` endpoint to query from `ProductMaster` and restrict results to `ProductStatus.ACTIVE`.
+5. **Evaluation harness alignment**: Updated `eval.py` and `test_cases.json` to target real `uuid` and product data.
 
 ### Verified state
 
@@ -98,7 +96,7 @@ The second migration was added to support Phase 7 idempotent inserts using Postg
 The Stage 1 `/search` flow is:
 
 1. Validate query params with `SearchRequest`
-2. Fetch candidates from PostgreSQL with optional `category` and `in_stock_only` prefilters
+2. Fetch candidates from PostgreSQL with optional `category` prefilter, filtering for `status == "ACTIVE"`
 3. Convert ORM rows to plain dicts
 4. Score each product in Python via `score_product`
 5. Drop results below `min_score`
@@ -107,21 +105,21 @@ The Stage 1 `/search` flow is:
 
 ## Scoring Behavior
 
-The scorer is intentionally simple and additive.
+The scorer is additive and operates on `ProductMaster` fields.
 
 Signals currently include:
 
 - exact, startswith, whole-word, and contains matching on `name`
 - exact and contains matching on `brand`
 - exact and contains matching on `category`
-- exact and contains matching on `tags`
-- contains matching on `description`
-- boosts for high rating, high review count, and in-stock items
-- penalty for out-of-stock items
+- contains matching on `type`, `sub_category`, and `model_number`
+- exact matching on `required_certifications`
+- contains matching on `hazardous_materials`
+- boost for high repairability (`repairability_score >= 0.75`)
 
 ### Nuances
 
-- Out-of-stock products receive `-10`, so a product with no lexical match can score negative rather than zero.
+- All returned products are active, so status boosts and penalties have been removed.
 - Because ranking is additive and there is no second-pass semantic filter yet, exact query matches often occupy rank 1 while highly boosted unrelated products can still appear in ranks 2-3.
 - Sort order is only `total_score DESC`. There is no explicit secondary tie-breaker yet.
 
@@ -229,9 +227,8 @@ Those are acceptable for the current Stage 1 POC, but they are worth keeping in 
 
 ## Good Next Steps
 
-When work resumes, the most natural next direction is Stage 2:
+When work resumes, the most natural next direction is Phase 2 / Stage 2:
 
-- push lexical scoring into PostgreSQL
-- use `tsvector` / `tsquery`
-- add trigram similarity with `pg_trgm`
-- keep the current seed dataset and eval harness as a regression baseline
+- **Phase 2**: Introduce full-text search with PG `tsvector`/`tsquery` and wildcard matching.
+- **Stage 2**: Push lexical scoring into PostgreSQL.
+- Keep the current seed dataset and eval harness as a regression baseline.

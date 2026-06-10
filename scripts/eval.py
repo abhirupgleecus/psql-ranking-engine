@@ -26,14 +26,14 @@ def load_test_cases(path: Path) -> list[dict]:
             raise ValueError(
                 f"Test case #{index} must include a non-empty description."
             )
-        expected_ids = case.get("expected_top3_ids")
-        if not isinstance(expected_ids, list) or not expected_ids:
+        expected_uuids = case.get("expected_top3_uuids")
+        if not isinstance(expected_uuids, list) or not expected_uuids:
             raise ValueError(
-                f"Test case #{index} must include a non-empty expected_top3_ids list."
+                f"Test case #{index} must include a non-empty expected_top3_uuids list."
             )
-        if not all(isinstance(product_id, str) and product_id for product_id in expected_ids):
+        if not all(isinstance(product_uuid, str) and product_uuid for product_uuid in expected_uuids):
             raise ValueError(
-                f"Test case #{index} has an invalid product ID in expected_top3_ids."
+                f"Test case #{index} has an invalid product UUID in expected_top3_uuids."
             )
 
     return data
@@ -41,7 +41,7 @@ def load_test_cases(path: Path) -> list[dict]:
 
 def evaluate_case(client: httpx.Client, base_url: str, case: dict) -> bool:
     query = case["query"]
-    expected_ids = case["expected_top3_ids"]
+    expected_uuids = case["expected_top3_uuids"]
     description = case["description"]
 
     try:
@@ -62,28 +62,28 @@ def evaluate_case(client: httpx.Client, base_url: str, case: dict) -> bool:
 
     payload = response.json()
     results = payload.get("results", [])
-    returned_ids = [
-        result.get("id")
+    returned_uuids = [
+        result.get("uuid")
         for result in results[:3]
-        if isinstance(result, dict) and result.get("id")
+        if isinstance(result, dict) and result.get("uuid")
     ]
 
-    missing_ids = [
-        product_id
-        for product_id in expected_ids
-        if product_id not in returned_ids
+    missing_uuids = [
+        product_uuid
+        for product_uuid in expected_uuids
+        if product_uuid not in returned_uuids
     ]
 
-    if missing_ids:
+    if missing_uuids:
         print(
             f"FAIL | {query} | {description} | "
-            f"missing ids: {missing_ids} | returned ids: {returned_ids}"
+            f"missing uuids: {missing_uuids} | returned uuids: {returned_uuids}"
         )
         return False
 
     print(
         f"PASS | {query} | {description} | "
-        f"returned ids: {returned_ids}"
+        f"returned uuids: {returned_uuids}"
     )
     return True
 
