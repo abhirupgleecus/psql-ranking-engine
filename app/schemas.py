@@ -99,3 +99,77 @@ class SearchResponse(BaseModel):
     total_candidates: int
     results_returned: int
     results: list[RankedProductMaster]
+
+
+class SearchRequestV2(BaseModel):
+    q: str = Field(..., min_length=1)
+    top_n: int = Field(default=10, ge=1, le=100)
+    category: str | None = None
+    fallback_enabled: bool = True
+
+    @field_validator("q")
+    @classmethod
+    def validate_query(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Query cannot be empty")
+        return value
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+
+class RankedProductMasterV2(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    uuid: UUID
+    status: str
+    type: str | None
+    name: str
+    category: str | None
+    sub_category: str | None
+    brand: str
+    manufacturer: dict[str, Any]
+    upc: str | None
+    variant: str | None
+    model_number: str
+    serial_number: str | None
+    model_year: int | None
+    weight_lb: Decimal | None
+    weight_kg: Decimal | None
+    dimensions_inches: str | None
+    repairability_score: Decimal | None
+    disassembly_complexity: str | None
+    average_life_span_years: int | None
+    energy_efficiency_rating: str | None
+    authorized_needed: bool | None
+    special_handling_required: bool | None
+    contains_user_data: bool | None
+    mandatory_data_wipe_needed: bool | None
+    required_certifications: list[str]
+    market_value: dict[str, Any]
+    market_value_avgs: dict[str, Any]
+    hazardous_materials: list[str]
+    additional_data: dict[str, Any] | None
+    created_at: datetime
+    updated_at: datetime
+    goods_type: str
+    master_uuid: str | None
+    gtin: str | None
+    ean: str | None
+
+    search_score: float
+    search_mode: str
+
+
+class SearchResponseV2(BaseModel):
+    query: str
+    search_mode: str
+    results_returned: int
+    results: list[RankedProductMasterV2]
+

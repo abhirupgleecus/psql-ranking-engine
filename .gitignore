@@ -11,6 +11,7 @@ ENV/
 
 # Local environment files
 .env
+CLAUDE.md
 
 # Test, coverage, and tool caches
 .pytest_cache/

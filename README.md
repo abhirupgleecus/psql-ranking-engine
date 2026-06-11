@@ -6,11 +6,11 @@ This repo shows how to:
 
 - store a product catalog in PostgreSQL
 - fetch search candidates with async SQLAlchemy
-- apply deterministic ranking logic in Python
-- expose ranked results through a FastAPI endpoint
+- apply deterministic ranking logic in Python (Stage 1 `/search`)
+- compute native relevance ranking inside PostgreSQL using full-text search with wildcard fallback (Stage 2 `/search/v2`)
 - validate relevance quality with a repeatable eval harness
 
-It is designed as a **Stage 1 ranking system** that other developers can understand quickly and either:
+It is designed as a **relevance ranking proof-of-concept** that other developers can understand quickly and either:
 
 - run as a standalone search service, or
 - embed into an existing backend that needs SQL-backed search ranking
@@ -37,17 +37,17 @@ That makes it easy to:
 
 Implemented today:
 
-- FastAPI service with `/health` and `/search`
-- async PostgreSQL access with SQLAlchemy 2.x
-- parallel read-only database model (`ProductMaster`)
-- deterministic rule-based scorer
-- restored database table (`product_master`) containing realistic enterprise IT assets (printers, laptops, monitors)
-- evaluation harness with 12 top-3 relevance cases targeting real enterprise asset UUIDs
+- **Stage 1 (`/search`)**: FastAPI service with deterministic rule-based scorer running in the application layer.
+- **Stage 2 (`/search/v2`)**: Native PostgreSQL-scored full-text search (using a stored generated `tsvector` column and `ts_rank_cd`) with an automatic `ILIKE` wildcard search fallback.
+- async PostgreSQL access with SQLAlchemy 2.x and asyncpg.
+- parallel read-only database model (`ProductMaster`).
+- restored database table (`product_master`) containing realistic enterprise IT assets (printers, laptops, monitors).
+- evaluation harness with 12 top-3 relevance cases supporting engine selection (`--engine v1` or `--engine v2`).
+- integration testing suite for regression protection.
 
 Planned later:
 
-- Stage 2: PostgreSQL full-text search with `tsvector`, `tsquery`, and `pg_trgm`
-- Stage 3: semantic search with embeddings and `pgvector`
+- Stage 3: Fuzzy search with trigram matching (`pg_trgm`) and semantic search with embeddings (`pgvector`).
 
 ## How Search Works
 
@@ -106,15 +106,20 @@ psql-ranking-poc/
 │   ├── main.py
 │   ├── models.py
 │   ├── scorer.py
+│   ├── search_engine_v2.py
 │   ├── schemas.py
 │   └── routers/
-│       └── search.py
+│       ├── search.py
+│       └── search_v2.py
 ├── migrations/
 ├── scripts/
 │   ├── eval.py
+│   ├── migrate_phase2.sql
+│   ├── run_migrate_phase2.py
 │   └── seed.py
 ├── tests/
-│   └── test_scorer.py
+│   ├── test_scorer.py
+│   └── test_search_v2.py
 ├── context.md
 ├── test_cases.json
 ├── requirements.txt
@@ -145,8 +150,14 @@ LOG_LEVEL=INFO
 
 ### 3. Apply migrations
 
+Run the standard Alembic migration first:
 ```powershell
 .\.venv\Scripts\python.exe -m alembic upgrade head
+```
+
+Then run the Phase 2 Full-Text Search migration:
+```powershell
+.\.venv\Scripts\python.exe -m scripts.run_migrate_phase2
 ```
 
 ### 4. Seed sample data
@@ -171,10 +182,16 @@ Health check:
 curl http://127.0.0.1:8000/health
 ```
 
-Search:
+Search v1 (Python Scorer):
 
 ```powershell
 curl "http://127.0.0.1:8000/search?q=wireless%20headphones&top_n=3"
+```
+
+Search v2 (PostgreSQL Native Full-Text + Wildcard):
+
+```powershell
+curl "http://127.0.0.1:8000/search/v2?q=wireless%20headphones&top_n=3"
 ```
 
 ## API Contract
@@ -267,9 +284,78 @@ Response shape:
 
 Note:
 
-- `score_breakdown` only includes non-zero signals
+- `score_breakdown` only includes non-zero signals for v1
 - database failures are intentionally not swallowed
 - empty queries are rejected with HTTP `422`
+
+### `GET /search/v2`
+
+Query params:
+
+- `q` required search query
+- `top_n` optional, default `10`, max `100`
+- `category` optional category prefilter
+- `fallback_enabled` optional, default `true` (whether to fall back to ILIKE if FTS matches nothing)
+
+```text
+GET /search/v2?q=HP+Laptop&top_n=3
+```
+
+Response shape:
+
+```json
+{
+  "query": "HP Laptop",
+  "search_mode": "fulltext",
+  "results_returned": 3,
+  "results": [
+    {
+      "uuid": "86e72716-2151-47d7-91e9-d0fe73988790",
+      "status": "ACTIVE",
+      "type": "Laptop",
+      "name": "HP Laptop 15-dw Series",
+      "category": "Electronics",
+      "sub_category": "Laptops & Notebooks",
+      "brand": "HP",
+      "manufacturer": {
+        "name": "HP Inc.",
+        "support_url": "https://support.hp.com"
+      },
+      "upc": "196068222851",
+      "variant": "Standard",
+      "model_number": "15-dw",
+      "serial_number": "MXL9876543",
+      "model_year": 2023,
+      "weight_lb": 3.75,
+      "weight_kg": 1.7,
+      "dimensions_inches": "14.1 x 9.5 x 0.78",
+      "repairability_score": 7.2,
+      "disassembly_complexity": "MEDIUM",
+      "average_life_span_years": 5,
+      "energy_efficiency_rating": "Energy Star",
+      "authorized_needed": false,
+      "special_handling_required": false,
+      "contains_user_data": true,
+      "mandatory_data_wipe_needed": true,
+      "required_certifications": ["Energy Star"],
+      "market_value": {
+        "currency": "USD",
+        "current_market_value": 499.0
+      },
+      "market_value_avgs": {
+        "avg_refurbished_price": 349.0
+      },
+      "hazardous_materials": ["Lithium-ion Battery"],
+      "created_at": "2026-06-10T11:23:21Z",
+      "updated_at": "2026-06-10T11:23:21Z",
+      "goods_type": "SMALL_WHITE_GOODS",
+      "search_score": 1.45,
+      "search_mode": "fulltext"
+    }
+  ]
+}
+```
+
 
 ## Validation
 
@@ -284,20 +370,25 @@ Note:
 Run the API, then:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\eval.py --base-url http://127.0.0.1:8000
+# Evaluate Stage 1 (Python Scorer)
+.\.venv\Scripts\python.exe scripts\eval.py --engine v1
+
+# Evaluate Stage 2 (PostgreSQL Native Full-Text + Wildcard)
+.\.venv\Scripts\python.exe scripts\eval.py --engine v2
 ```
 
 What the eval does:
 
 - loads `test_cases.json`
-- issues live `GET /search?q=...&top_n=3` requests
+- issues live requests to `/search` (v1) or `/search/v2` (v2) with `top_n=3`
 - checks whether expected product IDs appear in the returned top 3
 - prints `PASS` or `FAIL` per case
 - exits non-zero if accuracy is below `90%`
 
 Current verified result:
 
-- `12/12` cases passed
+- `12/12` cases passed on both engines (100% accuracy)
+
 - `100.0%` top-3 accuracy against the restored product_master benchmark
 
 Important interpretation:

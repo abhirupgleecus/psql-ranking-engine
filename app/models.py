@@ -17,7 +17,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -318,3 +318,9 @@ class ProductMaster(Base):
         String(50),
         nullable=True,
     )
+
+    search_vector: Mapped[Any | None] = mapped_column(
+        TSVECTOR,
+        nullable=True,
+    )
+

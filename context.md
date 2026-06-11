@@ -9,25 +9,47 @@
 - Ranking is performed in Python by `app/scorer.py`.
 - The schema already includes a few future-facing indexes for later Stage 2 and Stage 3 work.
 
-As of June 10, 2026, Phase 1 of the ProductMaster search migration is completed. Phase 2 (full-text + wildcard search) comes later.
+As of June 10, 2026, Phase 1 and Phase 2 (full-text + wildcard search) are completed. Phase 3 (trigram and vector search) comes later.
 
 ## Current Status
 
-### Completed Phases (Phase 1)
+### Completed Phases
 
+#### Phase 1: ProductMaster Migration
 1. **Parallel database model**: Added read-only `ProductMaster` ORM model backed by `product_master` table.
 2. **Schema reshaping**: Created `RankedProductMaster` response and `ScoreBreakdown` models; simplified `SearchRequest` to remove status parameters/filters.
 3. **Scorer rewrite**: Retuned scoring signals around `ProductMaster` properties and removed status signals (only `ACTIVE` products are displayed/searched).
 4. **Search path migration**: Modified `/search` endpoint to query from `ProductMaster` and restrict results to `ProductStatus.ACTIVE`.
 5. **Evaluation harness alignment**: Updated `eval.py` and `test_cases.json` to target real `uuid` and product data.
 
+#### Phase 2: Full-text + Wildcard Search (/search/v2)
+1. **Database Migration (`scripts/migrate_phase2.sql`)**: 
+   - Enabled the `pg_trgm` extension.
+   - Defined `immutable_array_to_string` to convert array columns immutably.
+   - Added a stored generated `search_vector` column to `product_master` indexing `name` (A), `brand` (B), `category` (B), `sub_category` (C), `type` (C), `model_number` (C), and stringified array fields (`required_certifications`, `hazardous_materials`) (D).
+   - Created a GIN index on the `search_vector` column.
+2. **Reshaped Schemas**:
+   - Added `SearchRequestV2` containing a `fallback_enabled` toggle.
+   - Added `RankedProductMasterV2` returning `search_score` and `search_mode` ("fulltext" or "wildcard").
+   - Added `SearchResponseV2` returning overall `search_mode` for the query.
+3. **SQL Search Engine (`app/search_engine_v2.py`)**:
+   - Created a query normalizer converting natural language to a prefix-matching tsquery (`word:*`).
+   - Implemented a dual-path logic: runs full-text search with `ts_rank_cd` and, if zero results are returned and `fallback_enabled` is active, falls back to a multi-field `ILIKE` wildcard query.
+4. **Endpoint (`app/routers/search_v2.py`)**:
+   - Exposed `GET /search/v2` calling the database search engine.
+5. **Testing & Eval Harness**:
+   - Updated `scripts/eval.py` to support target engine selection via `--engine v1` or `--engine v2`.
+   - Created `tests/test_search_v2.py` integration tests verifying the API behavior.
+   - Configured `app/database.py` to use `NullPool` during testing to prevent asyncpg connection collision errors.
+
 ### Verified state
 
-- `tests/test_scorer.py` passes in the project virtualenv.
+- `tests/test_scorer.py` and `tests/test_search_v2.py` pass cleanly in the virtualenv.
 - Alembic upgrades cleanly through the latest revision.
 - `scripts/seed.py` inserts 50 realistic products and is idempotent.
-- `scripts/eval.py` passes against a running local API.
-- Latest observed eval result on June 8, 2026: `24/24 cases passed = 100.0%`
+- `scripts/eval.py` passes against the running API for both v1 and v2 engines:
+  - `eval.py --engine v1`: `12/12 cases passed = 100.0%`
+  - `eval.py --engine v2`: `12/12 cases passed = 100.0%` (using fulltext with automatic wildcard fallback where needed).
 
 ## Stack
 
@@ -45,85 +67,58 @@ As of June 10, 2026, Phase 1 of the ProductMaster search migration is completed.
 - `app/main.py`
   - FastAPI app setup
   - lifespan DB connectivity check
-  - `/health`
+  - registers search router (`/search`) and search_v2 router (`/search/v2`)
 - `app/database.py`
   - environment-backed settings
-  - async engine
+  - async engine with `NullPool` detection for testing
   - async session factory
   - `get_db`
 - `app/models.py`
-  - `Product` ORM model
-  - unique constraint on `(name, brand)`
+  - `Product` and `ProductMaster` ORM models
 - `app/schemas.py`
-  - search request and response models
+  - search request and response models for both v1 and v2
 - `app/scorer.py`
-  - additive deterministic ranking logic
+  - additive deterministic ranking logic in Python (v1)
+- `app/search_engine_v2.py`
+  - PostgreSQL-driven FTS and wildcard search logic (v2)
 - `app/routers/search.py`
-  - `/search` endpoint
+  - `/search` endpoint (v1)
+- `app/routers/search_v2.py`
+  - `/search/v2` endpoint (v2)
+- `scripts/migrate_phase2.sql`
+  - SQL script to migrate database schema for full-text capabilities
+- `scripts/run_migrate_phase2.py`
+  - Python runner for Phase 2 migration
 - `scripts/seed.py`
-  - deterministic dataset for Phase 7
-  - PostgreSQL upsert-based idempotent seeding
+  - deterministic dataset for seeding
 - `scripts/eval.py`
-  - top-3 evaluation harness
+  - top-3 evaluation harness supporting `--engine` selection
 - `test_cases.json`
-  - 24 eval cases derived from seeded fixed product IDs
+  - 12 eval cases derived from seeded fixed product IDs
 
 ## Database State
 
 ### Products table
 
-The main table is `products`.
+The initial table is `products`.
+
+### Product Master table
+
+The main table for the migrated catalog is `product_master`.
 
 Key characteristics:
+- Stored generated `search_vector` column using weighting (A through D).
+- GIN index `idx_product_master_search_vector` on `search_vector`.
+- pg_trgm extension enabled.
 
-- UUID primary key with `gen_random_uuid()`
-- future-facing GIN index on `to_tsvector('english', name)`
-- GIN index on `tags`
-- B-tree indexes on `brand` and `category`
-- unique constraint on `(name, brand)`
+## Search Flow (v2)
 
-### Migration history
+The Stage 2 `/search/v2` flow is:
 
-- `e884a7c1b51e`
-  - creates the initial `products` table and indexes
-- `eb7a3f8d6c2a`
-  - adds `uq_products_name_brand`
-
-The second migration was added to support Phase 7 idempotent inserts using PostgreSQL conflict handling.
-
-## Search Flow
-
-The Stage 1 `/search` flow is:
-
-1. Validate query params with `SearchRequest`
-2. Fetch candidates from PostgreSQL with optional `category` prefilter, filtering for `status == "ACTIVE"`
-3. Convert ORM rows to plain dicts
-4. Score each product in Python via `score_product`
-5. Drop results below `min_score`
-6. Sort by `total_score DESC`
-7. Return top `N`
-
-## Scoring Behavior
-
-The scorer is additive and operates on `ProductMaster` fields.
-
-Signals currently include:
-
-- exact, startswith, whole-word, and contains matching on `name`
-- exact and contains matching on `brand`
-- exact and contains matching on `category`
-- contains matching on `type`, `sub_category`, and `model_number`
-- exact matching on `required_certifications`
-- contains matching on `hazardous_materials`
-- boost for high repairability (`repairability_score >= 0.75`)
-
-### Nuances
-
-- All returned products are active, so status boosts and penalties have been removed.
-- Because ranking is additive and there is no second-pass semantic filter yet, exact query matches often occupy rank 1 while highly boosted unrelated products can still appear in ranks 2-3.
-- Sort order is only `total_score DESC`. There is no explicit secondary tie-breaker yet.
-
-That last point matters for evaluation: the test suite was intentionally written to avoid depending on ambiguous tie ordering.
+1. Validate query params with `SearchRequestV2`
+2. If query tokens exist, build prefix-based tsquery and fetch using FTS (@@) sorted by `ts_rank_cd DESC`
+3. If FTS returns results, return immediately with `search_mode: "fulltext"` and the FTS rank scores
+4. If FTS returns 0 results and `fallback_enabled` is True, execute fallback query using `ILIKE` on name, brand, category, sub_category, type, model_number, and array columns (via `immutable_array_to_string`). Returns results with `search_mode: "wildcard"` and a score of `0.0`.
 
 ## Seed Dataset
 
@@ -136,59 +131,27 @@ That last point matters for evaluation: the test suite was intentionally written
 - `fitness`
 
 Dataset properties:
-
 - 10 products per category
 - fixed UUIDs for repeatable evaluation
-- realistic names, brands, tags, descriptions, prices, ratings, and stock state
-- overlapping brands and terms such as:
-  - multiple Nike products across footwear, clothing, and fitness
-  - multiple wireless audio products in electronics
-  - multiple blender SKUs in kitchen
-  - multiple recovery/yoga items in fitness
-- at least 10 products with `rating >= 4.5` and `review_count >= 100`
-- at least 5 out-of-stock products
-
-### Idempotency
-
-The seed script uses PostgreSQL `ON CONFLICT DO NOTHING` against `(name, brand)`.
-
-Observed verification:
-
-- first run inserted 50 rows
-- second run inserted 0 rows
+- realistic name, brand, tag, description, price, rating, and stock state
 
 ## Evaluation Harness
 
 `scripts/eval.py`:
-
 - loads `test_cases.json`
-- calls `GET /search?q=<query>&top_n=3`
+- calls `GET /search` (for v1) or `GET /search/v2` (for v2) with `top_n=3`
 - checks whether each case's expected IDs appear in the returned top 3
 - prints per-case `PASS` or `FAIL`
-- prints a final accuracy line
 - exits with code `1` if accuracy is below `90.0`
-
-### Current eval suite
-
-- 24 cases total
-- mixture of:
-  - exact product-name queries
-  - case-insensitive queries
-  - whitespace-normalization queries
-  - multi-hit queries such as `wireless headphones`, `blender`, `massage gun`, `yoga mat`, and `cuisinart`
-
-Latest verified output:
-
-`Accuracy: 24/24 cases passed = 100.0%`
 
 ## Commands
 
 From the project root on Windows:
 
-1. Apply migrations
+1. Apply Phase 2 DB Migration
 
 ```powershell
-.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m scripts.run_migrate_phase2
 ```
 
 2. Seed the database
@@ -203,32 +166,26 @@ From the project root on Windows:
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-4. Run the eval harness
+4. Run the eval harness (v1 or v2)
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\eval.py --base-url http://127.0.0.1:8000
+.\.venv\Scripts\python.exe scripts\eval.py --engine v1
+.\.venv\Scripts\python.exe scripts\eval.py --engine v2
 ```
 
-5. Run scorer unit tests
+5. Run unit/integration tests
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests\test_scorer.py
+.\.venv\Scripts\pytest
 ```
 
 ## Known Limitations
 
-- Stage 1 still fetches all filtered candidates into the app and scores them in Python.
-- There is no SQL-native ranking yet.
-- There is no vector search yet.
-- Tie-breaking is not explicit beyond descending score.
-- `score_breakdown` is currently represented in the response model as `dict[str, int]` rather than a dedicated `ScoreBreakdown` schema type.
-
-Those are acceptable for the current Stage 1 POC, but they are worth keeping in mind before future ranking work.
+- Wildcard search scores are hardcoded to `0.0`.
+- We do not have trigram/fuzzy text matching yet (reserved for Phase 3).
+- Vector/semantic search is not implemented (reserved for Phase 3).
 
 ## Good Next Steps
 
-When work resumes, the most natural next direction is Phase 2 / Stage 2:
-
-- **Phase 2**: Introduce full-text search with PG `tsvector`/`tsquery` and wildcard matching.
-- **Stage 2**: Push lexical scoring into PostgreSQL.
-- Keep the current seed dataset and eval harness as a regression baseline.
+- **Phase 3**: Introduce fuzzy search using `pg_trgm` (`%` operator) and explore vector search capabilities.
+- Add performance telemetry to compare the execution speed of Phase 1 vs Phase 2 search paths.

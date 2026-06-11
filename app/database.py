@@ -9,6 +9,9 @@ from sqlalchemy.orm import DeclarativeBase
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+from sqlalchemy.pool import NullPool
+import sys
+
 class Settings(BaseSettings):
     DATABASE_URL: str
     APP_ENV: str = "development"
@@ -27,11 +30,16 @@ class Base(DeclarativeBase):
     pass
 
 
+is_testing = "pytest" in sys.modules
+engine_kwargs = {"poolclass": NullPool} if is_testing else {}
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
     future=True,
+    **engine_kwargs
 )
+
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
