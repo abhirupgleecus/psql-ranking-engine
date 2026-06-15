@@ -35,3 +35,7 @@ dist/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Temp dump files (from the pg_dump import step)
+*.sql.tmp
+product_master_data.sql

@@ -39,15 +39,12 @@ Implemented today:
 
 - **Stage 1 (`/search`)**: FastAPI service with deterministic rule-based scorer running in the application layer.
 - **Stage 2 (`/search/v2`)**: Native PostgreSQL-scored full-text search (using a stored generated `tsvector` column and `ts_rank_cd`) with an automatic `ILIKE` wildcard search fallback.
+- **Stage 3 (`/search/v3`)**: Hybrid lexical + semantic search using `pgvector`, Gemini embeddings, and Reciprocal Rank Fusion (RRF).
 - async PostgreSQL access with SQLAlchemy 2.x and asyncpg.
 - parallel read-only database model (`ProductMaster`).
 - restored database table (`product_master`) containing realistic enterprise IT assets (printers, laptops, monitors).
-- evaluation harness with 12 top-3 relevance cases supporting engine selection (`--engine v1` or `--engine v2`).
+- evaluation harness with 12 top-3 relevance cases supporting engine selection (`--engine v1`, `--engine v2`, or `--engine v3`).
 - integration testing suite for regression protection.
-
-Planned later:
-
-- Stage 3: Fuzzy search with trigram matching (`pg_trgm`) and semantic search with embeddings (`pgvector`).
 
 ## How Search Works
 
@@ -91,36 +88,50 @@ The score breakdown is returned in the API response so callers can see why each 
 - Python 3.11+
 - FastAPI
 - PostgreSQL 15+
+- Docker Desktop
 - SQLAlchemy 2.x async + `asyncpg`
 - Alembic
 - Pydantic v2
 - pytest
 - httpx
+- `pgvector`
+- `google-genai`
 
 ## Project Layout
 
 ```text
 psql-ranking-poc/
 ├── app/
-│   ├── database.py
-│   ├── main.py
-│   ├── models.py
-│   ├── scorer.py
-│   ├── search_engine_v2.py
-│   ├── schemas.py
+│   ├── __init__.py
+│   ├── database.py          # settings, async engine, session factory
+│   ├── embedding_client.py  # Gemini Embedding 2 wrapper
+│   ├── main.py              # FastAPI app + router registration
+│   ├── models.py            # Product and ProductMaster ORM models
+│   ├── rrf.py               # Reciprocal Rank Fusion
+│   ├── schemas.py           # Pydantic request/response models
+│   ├── scorer.py            # deterministic application-layer scorer (v1)
+│   ├── search_engine_v2.py  # PostgreSQL full-text + ILIKE wildcard (v2)
+│   ├── search_engine_v3.py  # hybrid lexical + semantic orchestration (v3)
 │   └── routers/
-│       ├── search.py
-│       └── search_v2.py
-├── migrations/
+│       ├── search.py        # GET /search  (v1)
+│       ├── search_v2.py     # GET /search/v2
+│       └── search_v3.py     # GET /search/v3
+├── migrations/              # Alembic migration history
 ├── scripts/
-│   ├── eval.py
-│   ├── migrate_phase2.sql
+│   ├── bootstrap_product_master.sql  # base schema + enum types for fresh DBs
+│   ├── embed_products.py    # batch embedding pipeline for product_master
+│   ├── eval.py              # relevance eval harness (v1 / v2 / v3)
+│   ├── migrate_phase2.sql   # SQL: pg_trgm, search_vector, GIN index
+│   ├── migrate_phase3.sql   # SQL: vector extension, embedding column, HNSW index
 │   ├── run_migrate_phase2.py
-│   └── seed.py
+│   ├── run_migrate_phase3.py
+│   └── seed.py              # legacy seed for the older `products` table
 ├── tests/
+│   ├── test_rrf.py
 │   ├── test_scorer.py
 │   └── test_search_v2.py
 ├── context.md
+├── docker-compose.yml
 ├── test_cases.json
 ├── requirements.txt
 └── README.md
@@ -138,61 +149,126 @@ pip install -r requirements.txt
 
 ### 2. Configure environment
 
-Copy `.env.example` to `.env` and set your PostgreSQL connection string.
+Copy `.env.example` to `.env`:
 
-Example:
+```powershell
+Copy-Item .env.example .env
+```
+
+The `.env` file controls all environment settings:
 
 ```env
-DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/psql_ranking_poc
+DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5433/psql_ranking_poc
 APP_ENV=development
 LOG_LEVEL=INFO
+GOOGLE_AI_API_KEY=your-gemini-api-key-here
 ```
 
-### 3. Apply migrations
+> `GOOGLE_AI_API_KEY` is only required for Stage 3 embeddings and `/search/v3`. Leave it blank to run v1 and v2.
 
-Run the standard Alembic migration first:
+### 3. Start PostgreSQL with pgvector
+
+This repo ships a Docker Compose service using `pgvector/pgvector:pg17`, exposed on host port `5433`.
+
 ```powershell
-.\.venv\Scripts\python.exe -m alembic upgrade head
+docker compose up -d postgres
 ```
 
-Then run the Phase 2 Full-Text Search migration:
+Wait for the healthcheck to pass before running any migrations or the API.
+
+### 4. Bootstrap `product_master`
+
+All three search endpoints query `product_master`, not the older `products` table.
+
+**Step 4a — Create the base schema** (idempotent; safe to re-run):
+
 ```powershell
+$env:PGPASSWORD='password'
+& 'C:\Program Files\PostgreSQL\18\bin\psql.exe' `
+  -h localhost -p 5433 -U postgres -d psql_ranking_poc `
+  -v ON_ERROR_STOP=1 -f scripts\bootstrap_product_master.sql
+```
+
+**Step 4b — Load product data** (if you have the restored native PostgreSQL on port 5432):
+
+```powershell
+$env:PGPASSWORD='password'
+& 'C:\Program Files\PostgreSQL\18\bin\pg_dump.exe' `
+  -h localhost -p 5432 -U postgres -d psql_ranking_poc `
+  -a -t public.product_master -f "$env:TEMP\product_master_data.sql"
+
+& 'C:\Program Files\PostgreSQL\18\bin\psql.exe' `
+  -h localhost -p 5433 -U postgres -d psql_ranking_poc `
+  -v ON_ERROR_STOP=1 -f "$env:TEMP\product_master_data.sql"
+```
+
+If you see a duplicate key error on import, the data is already present — this is safe to ignore.
+
+### 5. Apply Phase 2 and Phase 3 migrations
+
+These are idempotent — safe to re-run against a database that already has the changes.
+
+```powershell
+# Phase 2: pg_trgm, search_vector generated column, GIN index
 .\.venv\Scripts\python.exe -m scripts.run_migrate_phase2
+
+# Phase 3: vector extension, embedding column (vector(768)), HNSW index
+.\.venv\Scripts\python.exe -m scripts.run_migrate_phase3
 ```
 
-### 4. Seed sample data
+### 6. (Stage 3 only) Build embeddings
+
+Only required for `/search/v3` semantic results. Requires `GOOGLE_AI_API_KEY` set in `.env`.
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\seed.py
+.\.venv\Scripts\python.exe scripts\embed_products.py
 ```
 
-The seed script is idempotent. Running it twice will not create duplicates.
+This is a one-time batch job. Re-run it whenever new rows are added with `embedding IS NULL`.
 
-### 5. Start the API
+### 7. Start the API
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-### 6. Try the API
+### 8. Try the endpoints
 
-Health check:
+**Health check:**
 
 ```powershell
 curl http://127.0.0.1:8000/health
 ```
 
-Search v1 (Python Scorer):
+Expected: `{"status":"ok"}`
+
+**Stage 1 — Python scorer:**
 
 ```powershell
-curl "http://127.0.0.1:8000/search?q=wireless%20headphones&top_n=3"
+curl "http://127.0.0.1:8000/search?q=HP%20Laptop%2015-dw%20Series&top_n=3"
 ```
 
-Search v2 (PostgreSQL Native Full-Text + Wildcard):
+**Stage 2 — PostgreSQL FTS + ILIKE fallback:**
 
 ```powershell
-curl "http://127.0.0.1:8000/search/v2?q=wireless%20headphones&top_n=3"
+curl "http://127.0.0.1:8000/search/v2?q=HP%20Laptop%2015-dw%20Series&top_n=3"
 ```
+
+**Stage 3 — Hybrid lexical + semantic (requires embeddings):**
+
+```powershell
+curl "http://127.0.0.1:8000/search/v3?q=HP%20Laptop%2015-dw%20Series&top_n=3"
+```
+
+## Setup Notes
+
+- `docker-compose.yml` uses `pgvector/pgvector:pg17` and publishes the database on host port `5433`.
+- `.env` must point to `localhost:5433` (not 5432) for the Dockerized database.
+- `scripts/bootstrap_product_master.sql` creates the base `product_master` schema, sequence, enum types, and indexes. It is idempotent and safe to re-run.
+- `scripts/seed.py` populates the older `products` table only — the active API endpoints do **not** use `products`.
+- Phase 2 migration enables `pg_trgm`, adds a generated `search_vector` column, and creates a GIN index.
+- Phase 3 migration enables the `vector` extension, adds an `embedding vector(768)` column, and creates an HNSW index.
+- The HNSW index is sparse until `scripts/embed_products.py` runs — `/search/v3` will return only lexical results until embeddings are populated.
 
 ## API Contract
 
@@ -361,33 +437,47 @@ Response shape:
 
 ### Unit tests
 
+Run all tests (no running API or database required for scorer/rrf tests):
+
+```powershell
+.\.venv\Scripts\pytest
+```
+
+Or run individual suites:
+
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests\test_scorer.py
+.\.venv\Scripts\python.exe -m pytest tests\test_rrf.py
+.\.venv\Scripts\python.exe -m pytest tests\test_search_v2.py
 ```
 
 ### Relevance eval
 
-Run the API, then:
+The API must be running before running the eval harness.
 
 ```powershell
-# Evaluate Stage 1 (Python Scorer)
+# Stage 1 — Python scorer
 .\.venv\Scripts\python.exe scripts\eval.py --engine v1
 
-# Evaluate Stage 2 (PostgreSQL Native Full-Text + Wildcard)
+# Stage 2 — PostgreSQL FTS + ILIKE wildcard
 .\.venv\Scripts\python.exe scripts\eval.py --engine v2
+
+# Stage 3 — Hybrid lexical + semantic (requires embeddings)
+.\.venv\Scripts\python.exe scripts\eval.py --engine v3
 ```
 
 What the eval does:
 
 - loads `test_cases.json`
-- issues live requests to `/search` (v1) or `/search/v2` (v2) with `top_n=3`
+- issues live requests to `/search` (v1), `/search/v2` (v2), or `/search/v3` (v3) with `top_n=3`
 - checks whether expected product IDs appear in the returned top 3
 - prints `PASS` or `FAIL` per case
+- for v3, prints hybrid match details such as `matched_in`
 - exits non-zero if accuracy is below `90%`
 
 Current verified result:
 
-- `12/12` cases passed on both engines (100% accuracy)
+- `12/12` cases passed on v1 and v2 (100% accuracy)
 
 - `100.0%` top-3 accuracy against the restored product_master benchmark
 
@@ -412,8 +502,8 @@ Best when:
 How:
 
 - run this service separately
-- seed or sync your own catalog into the `products` table
-- call `/search` from your main application
+- load or sync your own catalog into `product_master`
+- call `/search`, `/search/v2`, or `/search/v3` from your main application
 
 ### Option 2: Embed the ranking flow into an existing FastAPI app
 
@@ -460,9 +550,8 @@ The scorer expects fields equivalent to:
 ### Integration Checklist
 
 - keep PostgreSQL as the candidate source
-- preserve the `(name, brand)` uniqueness rule if you want idempotent upserts
-- keep tags as an array if you want the same tag-matching behavior
-- make sure rating and review count are available for boost signals
+- preserve stable product identifiers (`uuid`) and searchable product metadata
+- make sure `product_master` contains the fields used by the current scorer and SQL search paths
 - return `score_breakdown` if you want explainability
 - keep eval-style test cases for regression checks when tuning weights
 
@@ -506,22 +595,23 @@ Why fixed seed IDs and eval cases:
 
 ## Known Limitations
 
-- all filtered candidates are fetched into the app before scoring
-- no SQL-native ranking yet
-- no semantic search yet
-- no explicit secondary tie-breaker beyond descending score
-- exact-match queries can still have unrelated but highly boosted items in ranks 2-3
+- v1 fetches all filtered candidates into the application layer before scoring (no SQL-level ranking)
+- `scripts/seed.py` targets the legacy `products` table; the active search endpoints use `product_master`
+- `product_master` cannot yet be seeded from a repo-native source — data must be imported from an existing database or an external source
+- Stage 3 (`/search/v3`) requires `GOOGLE_AI_API_KEY` and a completed `embed_products.py` run before semantic results appear
+- The embedding pipeline is a manual batch job with no automatic re-embedding trigger when product fields change
+- No explicit secondary tie-breaker in v1 beyond descending `total_score`
+- v3 RRF fusion may rerank results differently from v2 — this is expected and reflects the semantic component
 
-These are acceptable tradeoffs for a Stage 1 POC and are useful teaching points for the next evolution of the system.
+These are acceptable POC tradeoffs and well-understood follow-up opportunities.
 
 ## Recommended Next Step
 
 If you want to evolve this into a more production-like ranking system, the next milestone is:
 
-- move lexical scoring into PostgreSQL
-- add `tsvector` / `tsquery`
-- add `pg_trgm`
-- compare Stage 2 results against the current eval harness
+- unify the bootstrap story so `product_master` can be created and seeded directly from repo-owned assets
+- add integration tests for `/search/v3`
+- compare v2 and v3 quality and latency using the current eval harness
 
 ## Developer Notes
 

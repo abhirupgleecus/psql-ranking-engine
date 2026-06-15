@@ -18,6 +18,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID as PG_UUID
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -321,6 +322,11 @@ class ProductMaster(Base):
 
     search_vector: Mapped[Any | None] = mapped_column(
         TSVECTOR,
+        nullable=True,
+    )
+
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(768),
         nullable=True,
     )
 

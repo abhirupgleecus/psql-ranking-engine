@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
+    GOOGLE_AI_API_KEY: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -1,4 +1,6 @@
-"""Execute the Phase 2 migration script against the database.
+"""Execute the Phase 3 migration script against the database.
+
+Enables pgvector, adds the embedding column, and creates the HNSW index.
 
 asyncpg does not support multi-statement prepared statements, so we
 split the SQL script into individual statements and execute them
@@ -6,7 +8,6 @@ one at a time inside a single transaction.
 """
 
 import asyncio
-import re
 import sys
 from pathlib import Path
 
@@ -14,10 +15,12 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
+from sqlalchemy import text
+
 from app.database import engine
 
 
-MIGRATION_PATH = Path("scripts/migrate_phase2.sql")
+MIGRATION_PATH = Path("scripts/migrate_phase3.sql")
 
 
 def split_sql_statements(script: str) -> list[str]:
@@ -67,37 +70,52 @@ async def main() -> None:
             print(f"  [{i}/{len(statements)}] {first_line}...")
             await conn.execute(text(stmt))
 
-    print("Phase 2 migration executed successfully.")
+    print("Phase 3 migration executed successfully.")
 
-    # Verify: check search_vector column exists and is populated
+    # Verify: check vector extension, embedding column, and HNSW index
     async with engine.connect() as conn:
+        # 1. Verify pgvector extension
+        result = await conn.execute(
+            text("SELECT extname FROM pg_extension WHERE extname = 'vector'")
+        )
+        ext = result.first()
+        print(f"vector extension: {ext[0] if ext else 'NOT FOUND'}")
+
+        # 2. Verify embedding column exists
         result = await conn.execute(
             text(
-                "SELECT search_vector IS NOT NULL AS has_vector "
-                "FROM product_master LIMIT 1"
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'product_master' AND column_name = 'embedding'"
+            )
+        )
+        col = result.first()
+        print(f"embedding column: {col[0] if col else 'NOT FOUND'}")
+
+        # 3. Check how many rows have embeddings (should be 0 initially)
+        result = await conn.execute(
+            text(
+                "SELECT COUNT(*) AS total, "
+                "COUNT(embedding) AS with_embedding "
+                "FROM product_master"
             )
         )
         row = result.first()
-        print(f"search_vector populated: {row[0] if row else 'no rows'}")
+        print(
+            f"rows: {row[0]} total, {row[1]} with embeddings"
+            if row
+            else "no rows found"
+        )
 
+        # 4. Verify HNSW index
         result = await conn.execute(
             text(
                 "SELECT indexname FROM pg_indexes "
                 "WHERE tablename = 'product_master' "
-                "AND indexname = 'idx_product_master_search_vector'"
+                "AND indexname = 'idx_product_master_embedding'"
             )
         )
         idx = result.first()
-        print(f"GIN index present: {idx[0] if idx else 'NOT FOUND'}")
-
-        # Verify pg_trgm extension
-        result = await conn.execute(
-            text(
-                "SELECT extname FROM pg_extension WHERE extname = 'pg_trgm'"
-            )
-        )
-        ext = result.first()
-        print(f"pg_trgm extension: {ext[0] if ext else 'NOT FOUND'}")
+        print(f"HNSW index: {idx[0] if idx else 'NOT FOUND'}")
 
 
 if __name__ == "__main__":

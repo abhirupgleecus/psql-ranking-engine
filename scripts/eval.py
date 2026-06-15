@@ -44,7 +44,7 @@ def evaluate_case(client: httpx.Client, base_url: str, case: dict, engine: str) 
     expected_uuids = case["expected_top3_uuids"]
     description = case["description"]
 
-    path = "/search/v2" if engine == "v2" else "/search"
+    path = "/search/v3" if engine == "v3" else "/search/v2" if engine == "v2" else "/search"
 
     try:
         response = client.get(
@@ -83,10 +83,19 @@ def evaluate_case(client: httpx.Client, base_url: str, case: dict, engine: str) 
         )
         return False
 
-    # For v2, let's print the search mode used for additional visibility
-    mode_str = f" [mode: {payload.get('search_mode')}]" if engine == "v2" else ""
+    # For v2, print the search mode; for v3, print hybrid match info
+    extra_str = ""
+    if engine == "v2":
+        extra_str = f" [mode: {payload.get('search_mode')}]"
+    elif engine == "v3":
+        matched_sources = [
+            ",".join(r.get("matched_in", []))
+            for r in results[:3]
+            if isinstance(r, dict)
+        ]
+        extra_str = f" [mode: hybrid | matched_in: {'; '.join(matched_sources)}]"
     print(
-        f"PASS | {query} | {description}{mode_str} | "
+        f"PASS | {query} | {description}{extra_str} | "
         f"returned uuids: {returned_uuids}"
     )
     return True
@@ -103,9 +112,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--engine",
-        choices=["v1", "v2"],
+        choices=["v1", "v2", "v3"],
         default="v1",
-        help="Search engine to evaluate (v1 or v2). Defaults to v1.",
+        help="Search engine to evaluate (v1, v2, or v3). Defaults to v1.",
     )
     args = parser.parse_args()
 

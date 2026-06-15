@@ -173,3 +173,60 @@ class SearchResponseV2(BaseModel):
     results_returned: int
     results: list[RankedProductMasterV2]
 
+
+class RankedProductV3(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    uuid: UUID
+    status: str
+    type: str | None
+    name: str
+    category: str | None
+    sub_category: str | None
+    brand: str
+    manufacturer: dict[str, Any]
+    upc: str | None
+    variant: str | None
+    model_number: str
+    serial_number: str | None
+    model_year: int | None
+    weight_lb: Decimal | None
+    weight_kg: Decimal | None
+    dimensions_inches: str | None
+    repairability_score: Decimal | None
+    disassembly_complexity: str | None
+    average_life_span_years: int | None
+    energy_efficiency_rating: str | None
+    authorized_needed: bool | None
+    special_handling_required: bool | None
+    contains_user_data: bool | None
+    mandatory_data_wipe_needed: bool | None
+    required_certifications: list[str]
+    market_value: dict[str, Any]
+    market_value_avgs: dict[str, Any]
+    hazardous_materials: list[str]
+    additional_data: dict[str, Any] | None
+    created_at: datetime
+    updated_at: datetime
+    goods_type: str
+    master_uuid: str | None
+    gtin: str | None
+    ean: str | None
+
+    # V3-specific ranking fields
+    rrf_score: float
+    matched_in: list[str]
+    lexical_rank: int | None
+    lexical_score: float | None
+    semantic_rank: int | None
+    semantic_distance: float | None
+
+
+class SearchResponseV3(BaseModel):
+    query: str
+    search_mode: str  # "hybrid" | "lexical"
+    results_returned: int
+    rrf_k: int
+    candidate_multiplier: int
+    results: list[RankedProductV3]
+
