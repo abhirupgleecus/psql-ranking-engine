@@ -47,6 +47,7 @@ async def search_products_v2(
 
     # 1. Primary path: Full-text search
     if tsquery_val:
+        wildcard_pattern = f"%{query_str}%"
         fts_sql = text("""
             SELECT
                 uuid, status, type, name, category, sub_category, brand, manufacturer,
@@ -56,17 +57,27 @@ async def search_products_v2(
                 mandatory_data_wipe_needed, required_certifications, market_value, market_value_avgs,
                 hazardous_materials, additional_data, created_at, updated_at, goods_type,
                 master_uuid, gtin, ean,
-                ts_rank_cd(search_vector, to_tsquery('english', :tsquery)) AS rank
+                (
+                    ts_rank_cd(search_vector, to_tsquery('english', :tsquery))
+                    + coalesce(similarity(model_number, :raw_query), 0.0) * 2.0
+                    + coalesce(similarity(upc, :raw_query), 0.0) * 2.0
+                ) AS rank
             FROM product_master
             WHERE status = 'ACTIVE'
               AND (cast(:category as varchar) IS NULL OR category = :category)
-              AND search_vector @@ to_tsquery('english', :tsquery)
+              AND (
+                  search_vector @@ to_tsquery('english', :tsquery)
+                  OR model_number ILIKE :wildcard
+                  OR upc ILIKE :wildcard
+              )
             ORDER BY rank DESC, name ASC
             LIMIT :top_n;
         """)
 
         res = await db.execute(fts_sql, {
             "tsquery": tsquery_val,
+            "raw_query": query_str,
+            "wildcard": wildcard_pattern,
             "category": category,
             "top_n": top_n
         })
@@ -109,6 +120,7 @@ async def search_products_v2(
                   sub_category ILIKE :wildcard OR
                   type ILIKE :wildcard OR
                   model_number ILIKE :wildcard OR
+                  upc ILIKE :wildcard OR
                   immutable_array_to_string(required_certifications, ' ') ILIKE :wildcard OR
                   immutable_array_to_string(hazardous_materials, ' ') ILIKE :wildcard
               )

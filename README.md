@@ -38,7 +38,7 @@ That makes it easy to:
 Implemented today:
 
 - **Stage 1 (`/search`)**: FastAPI service with deterministic rule-based scorer running in the application layer.
-- **Stage 2 (`/search/v2`)**: Native PostgreSQL-scored full-text search (using a stored generated `tsvector` column and `ts_rank_cd`) with an automatic `ILIKE` wildcard search fallback.
+- **Stage 2 (`/search/v2`)**: Native PostgreSQL-scored full-text search (using a stored generated `tsvector` column and `ts_rank_cd`) blended with GIN-indexed trigram similarity matching on `model_number` and `upc` for accurate substring retrieval and ranking.
 - **Stage 3 (`/search/v3`)**: Hybrid lexical + semantic search using `pgvector`, Gemini embeddings, and Reciprocal Rank Fusion (RRF).
 - async PostgreSQL access with SQLAlchemy 2.x and asyncpg.
 - parallel read-only database model (`ProductMaster`).
@@ -122,8 +122,12 @@ psql-ranking-poc/
 │   ├── embed_products.py    # batch embedding pipeline for product_master
 │   ├── eval.py              # relevance eval harness (v1 / v2 / v3)
 │   ├── migrate_phase2.sql   # SQL: pg_trgm, search_vector, GIN index
+│   ├── migrate_phase2_v2.sql # SQL: model_number GIN trigram index + Weight B promotion
+│   ├── migrate_phase2_v3.sql # SQL: upc GIN trigram index + field re-weighting
 │   ├── migrate_phase3.sql   # SQL: vector extension, embedding column, HNSW index
 │   ├── run_migrate_phase2.py
+│   ├── run_migrate_phase2_v2.py
+│   ├── run_migrate_phase2_v3.py
 │   ├── run_migrate_phase3.py
 │   └── seed.py              # legacy seed for the older `products` table
 ├── tests/
@@ -204,13 +208,19 @@ $env:PGPASSWORD='password'
 
 If you see a duplicate key error on import, the data is already present — this is safe to ignore.
 
-### 5. Apply Phase 2 and Phase 3 migrations
+### 5. Apply Phase 2, Phase 2v2, and Phase 3 migrations
 
 These are idempotent — safe to re-run against a database that already has the changes.
 
 ```powershell
 # Phase 2: pg_trgm, search_vector generated column, GIN index
 .\.venv\Scripts\python.exe -m scripts.run_migrate_phase2
+
+# Phase 2v2: model_number trigram index and Weight B promotion
+.\.venv\Scripts\python.exe -m scripts.run_migrate_phase2_v2
+
+# Phase 2v3: upc trigram index and field re-weighting
+.\.venv\Scripts\python.exe -m scripts.run_migrate_phase2_v3
 
 # Phase 3: vector extension, embedding column (vector(768)), HNSW index
 .\.venv\Scripts\python.exe -m scripts.run_migrate_phase3
@@ -267,6 +277,8 @@ curl "http://127.0.0.1:8000/search/v3?q=HP%20Laptop%2015-dw%20Series&top_n=3"
 - `scripts/bootstrap_product_master.sql` creates the base `product_master` schema, sequence, enum types, and indexes. It is idempotent and safe to re-run.
 - `scripts/seed.py` populates the older `products` table only — the active API endpoints do **not** use `products`.
 - Phase 2 migration enables `pg_trgm`, adds a generated `search_vector` column, and creates a GIN index.
+- Phase 2v2 migration adds a GIN trigram index on `model_number` and rebuilds the generated `search_vector` with `model_number` promoted to Weight B.
+- Phase 2v3 migration adds a GIN trigram index on `upc` and rebuilds the generated `search_vector` with custom field weights.
 - Phase 3 migration enables the `vector` extension, adds an `embedding vector(768)` column, and creates an HNSW index.
 - The HNSW index is sparse until `scripts/embed_products.py` runs — `/search/v3` will return only lexical results until embeddings are populated.
 

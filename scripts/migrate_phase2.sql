@@ -32,12 +32,13 @@ BEGIN
         ALTER TABLE product_master
         ADD COLUMN search_vector tsvector
         GENERATED ALWAYS AS (
-            setweight(to_tsvector('english', coalesce(name, '')), 'A') ||
-            setweight(to_tsvector('english', coalesce(brand, '')), 'B') ||
+            setweight(to_tsvector('english', coalesce(brand, '')), 'A') ||
+            setweight(to_tsvector('english', coalesce(model_number, '')), 'A') ||
+            setweight(to_tsvector('english', coalesce(upc, '')), 'A') ||
+            setweight(to_tsvector('english', coalesce(name, '')), 'B') ||
             setweight(to_tsvector('english', coalesce(category, '')), 'B') ||
             setweight(to_tsvector('english', coalesce(sub_category, '')), 'C') ||
             setweight(to_tsvector('english', coalesce(type, '')), 'C') ||
-            setweight(to_tsvector('english', coalesce(model_number, '')), 'C') ||
             setweight(to_tsvector('english', coalesce(immutable_array_to_string(required_certifications, ' '), '')), 'D') ||
             setweight(to_tsvector('english', coalesce(immutable_array_to_string(hazardous_materials, ' '), '')), 'D')
         ) STORED;
@@ -48,4 +49,9 @@ $$;
 -- Step 3: GIN index on the search_vector column
 CREATE INDEX IF NOT EXISTS idx_product_master_search_vector
     ON product_master USING GIN(search_vector);
+
+-- Step 4: GIN trigram index on upc
+CREATE INDEX IF NOT EXISTS idx_product_master_upc_trgm
+    ON product_master USING gin (upc gin_trgm_ops);
+
 

@@ -8,7 +8,7 @@
 - Stage 2 (v2): PostgreSQL-native full-text search with ILIKE wildcard fallback.
 - Stage 3 (v3): Hybrid search combining lexical (v2) and semantic (pgvector) retrieval via Reciprocal Rank Fusion (RRF).
 
-As of June 15, 2026, Phase 1, Phase 2, and Phase 3 are completed.
+As of June 17, 2026, Phase 1, Phase 2, Phase 2v2, Phase 2v3, and Phase 3 are completed.
 
 ## Current Status
 
@@ -25,6 +25,16 @@ As of June 15, 2026, Phase 1, Phase 2, and Phase 3 are completed.
 2. `app/search_engine_v2.py` normalizes the query into prefix tsquery tokens and falls back to wildcard `ILIKE` search when needed.
 3. `app/routers/search_v2.py` exposes `GET /search/v2`.
 4. `scripts/eval.py` supports `--engine v2`.
+
+#### Phase 2v2: Model Number Search Improvements (`/search/v2`)
+1. `scripts/migrate_phase2_v2.sql` adds a GIN trigram index on `model_number` and reconstructs the `search_vector` generated column with `model_number` promoted from Weight C → B.
+2. `app/search_engine_v2.py` modifies the primary FTS path to match on both `search_vector @@ to_tsquery` and `model_number ILIKE :wildcard` (using GIN trigram index), blending `similarity(model_number, :raw_query)` into the FTS ranking.
+3. `scripts/run_migrate_phase2_v2.py` is the python migration runner.
+
+#### Phase 2v3: UPC ID Search & Search Vector Re-weighting (`/search/v2` & `/search/v3`)
+1. `scripts/migrate_phase2_v3.sql` creates a GIN trigram index on `upc` (`idx_product_master_upc_trgm`) and reconstructs the `search_vector` generated column to apply new weights (Weight A: brand, model_number, upc; Weight B: name, category; Weight C: sub_category, type; Weight D: required_certifications, hazardous_materials).
+2. `app/search_engine_v2.py` incorporates `upc ILIKE :wildcard` into FTS and fallback queries, and blends `coalesce(similarity(upc, :raw_query), 0.0) * 2.0` into the FTS ranking formula.
+3. `scripts/run_migrate_phase2_v3.py` is the python migration runner.
 
 #### Phase 3: Hybrid Search (`/search/v3`)
 1. `scripts/migrate_phase3.sql` enables `vector`, adds `embedding vector(768)`, and creates the HNSW index.
@@ -88,10 +98,18 @@ As of June 15, 2026, Phase 1, Phase 2, and Phase 3 are completed.
   - base `product_master` bootstrap SQL for fresh databases
 - `scripts/migrate_phase2.sql`
   - Phase 2 SQL migration
+- `scripts/migrate_phase2_v2.sql`
+  - Phase 2v2 SQL migration (trigram index + Weight B promotion)
+- `scripts/migrate_phase2_v3.sql`
+  - Phase 2v3 SQL migration (UPC trigram index + field re-weighting)
 - `scripts/migrate_phase3.sql`
   - Phase 3 SQL migration
 - `scripts/run_migrate_phase2.py`
   - Python runner for Phase 2
+- `scripts/run_migrate_phase2_v2.py`
+  - Python runner for Phase 2v2
+- `scripts/run_migrate_phase2_v3.py`
+  - Python runner for Phase 2v3
 - `scripts/run_migrate_phase3.py`
   - Python runner for Phase 3
 - `scripts/embed_products.py`
@@ -128,8 +146,9 @@ Key characteristics:
 
 1. Validate request params.
 2. Normalize query text into prefix-based tsquery tokens.
-3. Run PostgreSQL full-text search ordered by `ts_rank_cd`.
-4. If there are no full-text matches and fallback is enabled, run wildcard `ILIKE` search.
+3. Run PostgreSQL search: matches rows using either FTS (tsquery), model_number substring, or upc substring (ILIKE wildcard matching accelerated by the GIN trigram indexes on model_number and upc).
+4. Rank results by blending `ts_rank_cd`, `similarity(model_number, :raw_query) * 2.0`, and `similarity(upc, :raw_query) * 2.0`.
+5. If there are no primary matches and fallback is enabled, run wildcard `ILIKE` search across name, brand, category, model_number, upc, etc.
 
 ### v3
 
@@ -173,10 +192,12 @@ $env:PGPASSWORD='password'
 & 'C:\Program Files\PostgreSQL\18\bin\psql.exe' -h localhost -p 5433 -U postgres -d psql_ranking_poc -v ON_ERROR_STOP=1 -f "$env:TEMP\product_master_data.sql"
 ```
 
-5. Apply Phase 2 and Phase 3 migrations
+5. Apply Phase 2, Phase 2v2, Phase 2v3, and Phase 3 migrations
 
 ```powershell
 .\.venv\Scripts\python.exe -m scripts.run_migrate_phase2
+.\.venv\Scripts\python.exe -m scripts.run_migrate_phase2_v2
+.\.venv\Scripts\python.exe -m scripts.run_migrate_phase2_v3
 .\.venv\Scripts\python.exe -m scripts.run_migrate_phase3
 ```
 
