@@ -45,6 +45,9 @@ class ScoreBreakdown(BaseModel):
     type_contains_query: int | None = None
     sub_category_contains_query: int | None = None
     model_number_contains_query: int | None = None
+    exact_model_number_match: int | None = None
+    exact_upc_match: int | None = None
+    upc_contains_query: int | None = None
     certification_exact_match: int | None = None
     hazardous_material_contains_query: int | None = None
     boost_high_repairability: int | None = None

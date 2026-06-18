@@ -72,3 +72,66 @@ def test_no_matching_signals():
 
     assert score == 0
     assert breakdown == {}
+
+
+def test_exact_model_number_match():
+    product = {
+        "name": "Laptop",
+        "brand": "Dell",
+        "category": "Electronics",
+        "type": "Laptop",
+        "sub_category": "Laptops & Notebooks",
+        "model_number": "XPS13",
+        "upc": "123456789012",
+        "required_certifications": [],
+        "hazardous_materials": [],
+        "repairability_score": None,
+        "status": "ACTIVE",
+    }
+
+    score, breakdown = score_product(product, "XPS13")
+    assert breakdown["exact_model_number_match"] == 90
+    assert breakdown["model_number_contains_query"] == 10
+    assert score == 100
+
+
+def test_exact_upc_match():
+    product = {
+        "name": "Laptop",
+        "brand": "Dell",
+        "category": "Electronics",
+        "type": "Laptop",
+        "sub_category": "Laptops & Notebooks",
+        "model_number": "XPS13",
+        "upc": "123456789012",
+        "required_certifications": [],
+        "hazardous_materials": [],
+        "repairability_score": None,
+        "status": "ACTIVE",
+    }
+
+    score, breakdown = score_product(product, "123456789012")
+    assert breakdown["exact_upc_match"] == 100
+    assert breakdown["upc_contains_query"] == 20
+    assert score == 120
+
+
+def test_upc_substring_match():
+    product = {
+        "name": "Laptop",
+        "brand": "Dell",
+        "category": "Electronics",
+        "type": "Laptop",
+        "sub_category": "Laptops & Notebooks",
+        "model_number": "XPS13",
+        "upc": "123456789012",
+        "required_certifications": [],
+        "hazardous_materials": [],
+        "repairability_score": None,
+        "status": "ACTIVE",
+    }
+
+    score, breakdown = score_product(product, "56789")
+    assert "exact_upc_match" not in breakdown
+    assert breakdown["upc_contains_query"] == 20
+    assert score == 20

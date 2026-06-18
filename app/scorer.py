@@ -13,6 +13,9 @@ SIGNAL_WEIGHTS = {
     "type_contains_query": 5,
     "sub_category_contains_query": 10,
     "model_number_contains_query": 10,
+    "exact_model_number_match": 90,
+    "exact_upc_match": 100,
+    "upc_contains_query": 20,
     "certification_exact_match": 20,
     "hazardous_material_contains_query": 10,
     "boost_high_repairability": 8,
@@ -44,6 +47,7 @@ def score_product(product: dict, query: str) -> tuple[int, dict[str, int]]:
     product_type = normalize_text(product.get("type"))
     sub_category = normalize_text(product.get("sub_category"))
     model_number = normalize_text(product.get("model_number"))
+    upc = normalize_text(product.get("upc"))
 
     required_certifications = [
         normalize_text(certification)
@@ -96,8 +100,17 @@ def score_product(product: dict, query: str) -> tuple[int, dict[str, int]]:
     if query in sub_category:
         add_signal("sub_category_contains_query")
 
+    if query == model_number:
+        add_signal("exact_model_number_match")
+
     if query in model_number:
         add_signal("model_number_contains_query")
+
+    if query == upc:
+        add_signal("exact_upc_match")
+
+    if upc and query in upc:
+        add_signal("upc_contains_query")
 
     if any(query == certification for certification in required_certifications):
         add_signal("certification_exact_match")
