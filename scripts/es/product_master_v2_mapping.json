@@ -1,0 +1,251 @@
+{
+  "aliases": {
+    "product_master_v2_read": {},
+    "product_master_v2_write": {
+      "is_write_index": true
+    }
+  },
+  "settings": {
+    "analysis": {
+      "normalizer": {
+        "v2_lowercase_normalizer": {
+          "type": "custom",
+          "filter": [
+            "lowercase",
+            "asciifolding"
+          ]
+        }
+      },
+      "filter": {
+        "v2_model_ngram_filter": {
+          "type": "ngram",
+          "min_gram": 2,
+          "max_gram": 20
+        },
+        "v2_upc_ngram_filter": {
+          "type": "ngram",
+          "min_gram": 2,
+          "max_gram": 20
+        }
+      },
+      "analyzer": {
+        "v2_text_analyzer": {
+          "tokenizer": "standard",
+          "filter": [
+            "lowercase",
+            "asciifolding"
+          ]
+        },
+        "v2_keyword_lowercase": {
+          "tokenizer": "keyword",
+          "filter": [
+            "lowercase",
+            "asciifolding"
+          ]
+        },
+        "v2_model_partial_analyzer": {
+          "tokenizer": "keyword",
+          "filter": [
+            "lowercase",
+            "asciifolding",
+            "v2_model_ngram_filter"
+          ]
+        },
+        "v2_upc_partial_analyzer": {
+          "tokenizer": "keyword",
+          "filter": [
+            "lowercase",
+            "v2_upc_ngram_filter"
+          ]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "dynamic": false,
+    "properties": {
+      "uuid": {
+        "type": "keyword"
+      },
+      "status": {
+        "type": "keyword"
+      },
+      "type": {
+        "type": "text",
+        "analyzer": "v2_text_analyzer",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "name": {
+        "type": "text",
+        "analyzer": "v2_text_analyzer",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 512
+          }
+        }
+      },
+      "category": {
+        "type": "text",
+        "analyzer": "v2_text_analyzer",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "sub_category": {
+        "type": "text",
+        "analyzer": "v2_text_analyzer",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "brand": {
+        "type": "text",
+        "analyzer": "v2_text_analyzer",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "manufacturer": {
+        "type": "object",
+        "enabled": true
+      },
+      "upc": {
+        "type": "keyword",
+        "normalizer": "v2_lowercase_normalizer",
+        "fields": {
+          "text": {
+            "type": "text",
+            "analyzer": "v2_keyword_lowercase"
+          },
+          "partial": {
+            "type": "text",
+            "analyzer": "v2_upc_partial_analyzer",
+            "search_analyzer": "v2_keyword_lowercase"
+          }
+        }
+      },
+      "variant": {
+        "type": "keyword"
+      },
+      "model_number": {
+        "type": "keyword",
+        "normalizer": "v2_lowercase_normalizer",
+        "fields": {
+          "text": {
+            "type": "text",
+            "analyzer": "v2_keyword_lowercase"
+          },
+          "partial": {
+            "type": "text",
+            "analyzer": "v2_model_partial_analyzer",
+            "search_analyzer": "v2_keyword_lowercase"
+          }
+        }
+      },
+      "serial_number": {
+        "type": "keyword"
+      },
+      "model_year": {
+        "type": "integer"
+      },
+      "weight_lb": {
+        "type": "float"
+      },
+      "weight_kg": {
+        "type": "float"
+      },
+      "dimensions_inches": {
+        "type": "keyword"
+      },
+      "repairability_score": {
+        "type": "float"
+      },
+      "disassembly_complexity": {
+        "type": "keyword"
+      },
+      "average_life_span_years": {
+        "type": "integer"
+      },
+      "energy_efficiency_rating": {
+        "type": "text",
+        "analyzer": "v2_text_analyzer",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "authorized_needed": {
+        "type": "boolean"
+      },
+      "special_handling_required": {
+        "type": "boolean"
+      },
+      "contains_user_data": {
+        "type": "boolean"
+      },
+      "mandatory_data_wipe_needed": {
+        "type": "boolean"
+      },
+      "required_certifications": {
+        "type": "text",
+        "analyzer": "v2_text_analyzer",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "market_value": {
+        "type": "object",
+        "enabled": true
+      },
+      "market_value_avgs": {
+        "type": "object",
+        "enabled": true
+      },
+      "hazardous_materials": {
+        "type": "text",
+        "analyzer": "v2_text_analyzer",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "additional_data": {
+        "type": "object",
+        "enabled": true
+      },
+      "created_at": {
+        "type": "date"
+      },
+      "updated_at": {
+        "type": "date"
+      },
+      "goods_type": {
+        "type": "keyword"
+      },
+      "master_uuid": {
+        "type": "keyword"
+      },
+      "gtin": {
+        "type": "keyword"
+      },
+      "ean": {
+        "type": "keyword"
+      }
+    }
+  }
+}

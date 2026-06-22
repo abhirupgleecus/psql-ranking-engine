@@ -9,6 +9,7 @@
 - Stage 3 (v3): Hybrid search combining lexical (v2) and semantic (pgvector) retrieval via Reciprocal Rank Fusion (RRF).
 
 As of June 17, 2026, Phase 1, Phase 2, Phase 2v2, Phase 2v3, and Phase 3 are completed.
+As of June 22, 2026, planning and repo-prep work for a new Elastic-backed `/search/v2.2` path has started.
 
 ## Current Status
 
@@ -64,6 +65,24 @@ As of June 17, 2026, Phase 1, Phase 2, Phase 2v2, Phase 2v3, and Phase 3 are com
 - v3 (`/search/v3`) requires `GOOGLE_AI_API_KEY` in `.env` plus a completed `scripts/embed_products.py` run before semantic results are populated. If `GOOGLE_AI_API_KEY` is not set, it degrades gracefully to lexical-only RRF search (`search_mode: lexical`).
 - Embeddings are currently empty (0 rows embedded); the HNSW index exists but will only serve lexical fallback until embedding pipeline runs.
 
+### Elastic `v2.2` Repo Prep Status
+
+- The future `GET /search/v2.2` endpoint is planned to be behaviorally identical to `GET /search/v2`, but backed by Elastic instead of PostgreSQL.
+- `docs/elastic-v2-2-migration-plan.md` contains the two-deliverable migration plan across all 13 phases.
+- `docs/search-v2-contract.md` freezes the current `v2` input/output and fallback behavior so `v2.2` can target strict parity.
+- `docs/search-v2-elastic-document.md` defines the target Elastic document model derived from `product_master`.
+- `scripts/es/product_master_v2_mapping.json` contains the initial versioned Elastic mapping and alias plan:
+  - read alias: `product_master_v2_read`
+  - write alias: `product_master_v2_write`
+  - first concrete index: `product_master_v2_0001`
+- `scripts/create_es_index_v2.py` creates the versioned Elastic index using the checked-in mapping.
+- `app/elastic_client.py` provides a lazy async Elastic client helper driven by environment settings in `app/database.py`.
+- `scripts/check_elastic_connection.py` validates repo-to-Elastic connectivity.
+- `infra/cdc/debezium-product-master-v2.json` and `infra/cdc/es-sink-product-master-v2.json` are starter connector templates for the future CDC pipeline.
+- No runtime application endpoint behavior has changed yet:
+  - `/search/v2` is still PostgreSQL-backed
+  - `/search/v2.2` has not been implemented yet
+
 ## Stack
 
 - Python 3.12 in the local virtualenv
@@ -77,6 +96,7 @@ As of June 17, 2026, Phase 1, Phase 2, Phase 2v2, Phase 2v3, and Phase 3 are com
 - httpx
 - `pgvector`
 - `google-genai`
+- `elasticsearch-py`
 
 ## Important Files
 
@@ -92,10 +112,24 @@ As of June 17, 2026, Phase 1, Phase 2, Phase 2v2, Phase 2v3, and Phase 3 are com
   - hybrid lexical + semantic orchestration
 - `app/embedding_client.py`
   - Gemini Embedding 2 client wrapper
+- `app/elastic_client.py`
+  - lazy async Elastic client helper for the planned `v2.2` backend
 - `app/rrf.py`
   - Reciprocal Rank Fusion implementation
+- `docs/elastic-v2-2-migration-plan.md`
+  - end-to-end plan for the Elastic-backed `v2.2` migration
+- `docs/search-v2-contract.md`
+  - frozen contract for `v2` parity work
+- `docs/search-v2-elastic-document.md`
+  - target search document model for Elastic
 - `scripts/bootstrap_product_master.sql`
   - base `product_master` bootstrap SQL for fresh databases
+- `scripts/check_elastic_connection.py`
+  - verifies Elastic connection using repo configuration
+- `scripts/create_es_index_v2.py`
+  - creates the versioned Elastic index and aliases for future `v2.2`
+- `scripts/es/product_master_v2_mapping.json`
+  - first checked-in Elastic mapping for the future `v2.2` index
 - `scripts/migrate_phase2.sql`
   - Phase 2 SQL migration
 - `scripts/migrate_phase2_v2.sql`
@@ -118,6 +152,10 @@ As of June 17, 2026, Phase 1, Phase 2, Phase 2v2, Phase 2v3, and Phase 3 are com
   - legacy seed for the separate `products` table
 - `scripts/eval.py`
   - eval harness supporting v1, v2, and v3
+- `infra/cdc/debezium-product-master-v2.json`
+  - starter Debezium source connector config for `product_master`
+- `infra/cdc/es-sink-product-master-v2.json`
+  - starter Elastic sink connector config targeting the write alias
 - `test_cases.json`
   - expected top-3 benchmark cases
 
@@ -239,8 +277,7 @@ $env:PGPASSWORD='password'
 
 ## Good Next Steps
 
-- Run `scripts/embed_products.py` with a valid `GOOGLE_AI_API_KEY` to populate embeddings and fully enable `/search/v3`.
-- Add a repo-native `product_master` seed path so the active endpoints do not depend on an external database.
-- Add integration tests for `/search/v3`.
-- Add performance telemetry (latency, candidate counts) across v1, v2, and v3.
-- Add automatic re-embedding when searchable fields change.
+- Complete Elastic Cloud deployment and PostgreSQL CDC prerequisites for the planned `/search/v2.2` path.
+- Deploy and validate the Debezium + Elastic sink pipeline against the checked-in index mapping and aliases.
+- Implement `/search/v2.2` against Elastic while preserving strict parity with `/search/v2`.
+- Add side-by-side parity tests for `/search/v2` vs `/search/v2.2`.

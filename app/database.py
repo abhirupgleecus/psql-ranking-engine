@@ -17,6 +17,15 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
     GOOGLE_AI_API_KEY: str | None = None
+    ELASTIC_CLOUD_ID: str | None = None
+    ELASTIC_URL: str | None = None
+    ELASTIC_API_KEY: str | None = None
+    ELASTIC_USERNAME: str | None = None
+    ELASTIC_PASSWORD: str | None = None
+    ELASTIC_V2_INDEX_READ_ALIAS: str = "product_master_v2_read"
+    ELASTIC_V2_INDEX_WRITE_ALIAS: str = "product_master_v2_write"
+    ELASTIC_V2_INDEX_NAME: str = "product_master_v2_0001"
+    ELASTIC_V2_TIMEOUT_SECONDS: int = 10
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -40,6 +40,7 @@ Implemented today:
 - **Stage 1 (`/search`)**: FastAPI service with deterministic rule-based scorer running in the application layer.
 - **Stage 2 (`/search/v2`)**: Native PostgreSQL-scored full-text search (using a stored generated `tsvector` column and `ts_rank_cd`) blended with GIN-indexed trigram similarity matching on `model_number` and `upc` for accurate substring retrieval and ranking.
 - **Stage 3 (`/search/v3`)**: Hybrid lexical + semantic search using `pgvector`, Gemini embeddings, and Reciprocal Rank Fusion (RRF).
+- **Stage 2.2 prep (`/search/v2.2`, planned)**: Elastic-backed successor to `v2` with a frozen parity contract, versioned index mapping, async client plumbing, and CDC connector templates checked into the repo.
 - async PostgreSQL access with SQLAlchemy 2.x and asyncpg.
 - parallel read-only database model (`ProductMaster`).
 - restored database table (`product_master`) containing realistic enterprise IT assets (printers, laptops, monitors).
@@ -96,6 +97,7 @@ The score breakdown is returned in the API response so callers can see why each 
 - httpx
 - `pgvector`
 - `google-genai`
+- `elasticsearch-py`
 
 ## Project Layout
 
@@ -166,9 +168,20 @@ DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5433/psql_ranking_
 APP_ENV=development
 LOG_LEVEL=INFO
 GOOGLE_AI_API_KEY=your-gemini-api-key-here
+ELASTIC_CLOUD_ID=your-elastic-cloud-id-here
+ELASTIC_URL=https://your-deployment.es.us-central1.gcp.cloud.es.io:443
+ELASTIC_API_KEY=your-elastic-api-key-here
+ELASTIC_USERNAME=
+ELASTIC_PASSWORD=
+ELASTIC_V2_INDEX_READ_ALIAS=product_master_v2_read
+ELASTIC_V2_INDEX_WRITE_ALIAS=product_master_v2_write
+ELASTIC_V2_INDEX_NAME=product_master_v2_0001
+ELASTIC_V2_TIMEOUT_SECONDS=10
 ```
 
 > `GOOGLE_AI_API_KEY` is only required for Stage 3 embeddings and `/search/v3`. Leave it blank to run v1 and v2.
+>
+> The Elastic settings are preparatory for the planned `/search/v2.2` endpoint. They are not required for the current PostgreSQL-backed `/search/v2`.
 
 ### 3. Start PostgreSQL with pgvector
 
@@ -281,6 +294,14 @@ curl "http://127.0.0.1:8000/search/v3?q=HP%20Laptop%2015-dw%20Series&top_n=3"
 - Phase 2v3 migration adds a GIN trigram index on `upc` and rebuilds the generated `search_vector` with custom field weights.
 - Phase 3 migration enables the `vector` extension, adds an `embedding vector(768)` column, and creates an HNSW index.
 - The HNSW index is sparse until `scripts/embed_products.py` runs — `/search/v3` will return only lexical results until embeddings are populated.
+- The repo now includes the first `v2.2` Elastic artifacts:
+  - `docs/search-v2-contract.md` freezes `v2` behavior so `v2.2` can match it.
+  - `docs/search-v2-elastic-document.md` defines the target Elastic document model.
+  - `scripts/es/product_master_v2_mapping.json` defines the versioned index mapping and aliases.
+  - `scripts/create_es_index_v2.py` creates `product_master_v2_0001` and the `product_master_v2_read` / `product_master_v2_write` aliases.
+  - `scripts/check_elastic_connection.py` verifies Elastic connectivity from the repo.
+  - `infra/cdc/debezium-product-master-v2.json` and `infra/cdc/es-sink-product-master-v2.json` are starter connector configs for the future CDC pipeline.
+- `/search/v2.2` does not exist yet; the current API remains PostgreSQL-backed for `v2`.
 
 ## API Contract
 
@@ -493,6 +514,17 @@ Current verified result:
 
 - `100.0%` top-3 accuracy against the restored product_master benchmark
 
+### Elastic prep checks
+
+Once Elastic credentials are configured in `.env`, you can verify connectivity and create the first versioned index:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_elastic_connection.py
+.\.venv\Scripts\python.exe scripts\create_es_index_v2.py
+```
+
+These commands are preparatory for the planned `GET /search/v2.2` endpoint and do not change the current `/search/v2` behavior.
+
 Important interpretation:
 
 - this is a **controlled POC benchmark**
@@ -621,12 +653,14 @@ These are acceptable POC tradeoffs and well-understood follow-up opportunities.
 
 If you want to evolve this into a more production-like ranking system, the next milestone is:
 
-- unify the bootstrap story so `product_master` can be created and seeded directly from repo-owned assets
-- add integration tests for `/search/v3`
-- compare v2 and v3 quality and latency using the current eval harness
+- complete Elastic Cloud + CDC provisioning for the planned `/search/v2.2` path
+- implement `/search/v2.2` against the versioned Elastic index while keeping `/search/v2` unchanged
+- add side-by-side parity tests comparing `/search/v2` and `/search/v2.2`
 
 ## Developer Notes
 
 - [context.md](./context.md) contains the living project context and implementation nuances
+- [docs/elastic-v2-2-migration-plan.md](./docs/elastic-v2-2-migration-plan.md) tracks the two-deliverable Elastic migration plan
+- [docs/search-v2-contract.md](./docs/search-v2-contract.md) freezes the current `v2` behavior for parity work
 - [scripts/seed.py](./scripts/seed.py) is the quickest way to understand the seeded catalog and benchmark assumptions
 - [app/scorer.py](./app/scorer.py) is the most important file if you want to port the ranking behavior elsewhere

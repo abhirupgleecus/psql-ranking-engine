@@ -1,0 +1,31 @@
+{
+  "name": "debezium-product-master-v2",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+    "topic.prefix": "psql_ranking_poc",
+    "database.hostname": "${file:/opt/connect-secrets/postgres.properties:host}",
+    "database.port": "${file:/opt/connect-secrets/postgres.properties:port}",
+    "database.user": "${file:/opt/connect-secrets/postgres.properties:user}",
+    "database.password": "${file:/opt/connect-secrets/postgres.properties:password}",
+    "database.dbname": "${file:/opt/connect-secrets/postgres.properties:dbname}",
+    "database.sslmode": "require",
+    "plugin.name": "pgoutput",
+    "slot.name": "dbz_product_master_v2",
+    "publication.name": "dbz_pub_product_master_v2",
+    "table.include.list": "public.product_master",
+    "snapshot.mode": "initial",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false",
+    "transforms": "unwrap,createKey,extractKey",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.delete.tombstone.handling.mode": "rewrite-with-tombstone",
+    "transforms.unwrap.add.fields": "op,table,lsn,source.ts_ms",
+    "transforms.createKey.type": "org.apache.kafka.connect.transforms.ValueToKey",
+    "transforms.createKey.fields": "uuid",
+    "transforms.extractKey.type": "org.apache.kafka.connect.transforms.ExtractField$Key",
+    "transforms.extractKey.field": "uuid",
+    "tombstones.on.delete": "true"
+  }
+}
