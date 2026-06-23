@@ -123,14 +123,10 @@ psql-ranking-poc/
 │   ├── bootstrap_product_master.sql  # base schema + enum types for fresh DBs
 │   ├── embed_products.py    # batch embedding pipeline for product_master
 │   ├── eval.py              # relevance eval harness (v1 / v2 / v3)
-│   ├── migrate_phase2.sql   # SQL: pg_trgm, search_vector, GIN index
-│   ├── migrate_phase2_v2.sql # SQL: model_number GIN trigram index + Weight B promotion
-│   ├── migrate_phase2_v3.sql # SQL: upc GIN trigram index + field re-weighting
-│   ├── migrate_phase3.sql   # SQL: vector extension, embedding column, HNSW index
-│   ├── run_migrate_phase2.py
-│   ├── run_migrate_phase2_v2.py
-│   ├── run_migrate_phase2_v3.py
-│   ├── run_migrate_phase3.py
+│   ├── migrate_postgres.sql # SQL: pg_trgm, vector, search_vector, embedding, all indexes
+│   ├── migrate_postgres_cdc.sql # SQL: replica identity & publication setup for CDC
+│   ├── run_migrate_postgres.py # Python: execute migrate_postgres.sql
+│   ├── run_migrate_postgres_cdc.py # Python: execute migrate_postgres.sql
 │   └── seed.py              # legacy seed for the older `products` table
 ├── tests/
 │   ├── test_rrf.py
@@ -226,17 +222,11 @@ If you see a duplicate key error on import, the data is already present — this
 These are idempotent — safe to re-run against a database that already has the changes.
 
 ```powershell
-# Phase 2: pg_trgm, search_vector generated column, GIN index
-.\.venv\Scripts\python.exe -m scripts.run_migrate_phase2
+# Apply final consolidated database migration (FTS + Trigrams + Vector Embeddings)
+.\.venv\Scripts\python.exe -m scripts.run_migrate_postgres
 
-# Phase 2v2: model_number trigram index and Weight B promotion
-.\.venv\Scripts\python.exe -m scripts.run_migrate_phase2_v2
-
-# Phase 2v3: upc trigram index and field re-weighting
-.\.venv\Scripts\python.exe -m scripts.run_migrate_phase2_v3
-
-# Phase 3: vector extension, embedding column (vector(768)), HNSW index
-.\.venv\Scripts\python.exe -m scripts.run_migrate_phase3
+# Apply logical replication (CDC) preparation migration
+.\.venv\Scripts\python.exe -m scripts.run_migrate_postgres_cdc
 ```
 
 ### 6. (Stage 3 only) Build embeddings
@@ -289,10 +279,8 @@ curl "http://127.0.0.1:8000/search/v3?q=HP%20Laptop%2015-dw%20Series&top_n=3"
 - `.env` must point to `localhost:5433` (not 5432) for the Dockerized database.
 - `scripts/bootstrap_product_master.sql` creates the base `product_master` schema, sequence, enum types, and indexes. It is idempotent and safe to re-run.
 - `scripts/seed.py` populates the older `products` table only — the active API endpoints do **not** use `products`.
-- Phase 2 migration enables `pg_trgm`, adds a generated `search_vector` column, and creates a GIN index.
-- Phase 2v2 migration adds a GIN trigram index on `model_number` and rebuilds the generated `search_vector` with `model_number` promoted to Weight B.
-- Phase 2v3 migration adds a GIN trigram index on `upc` and rebuilds the generated `search_vector` with custom field weights.
-- Phase 3 migration enables the `vector` extension, adds an `embedding vector(768)` column, and creates an HNSW index.
+- `scripts/migrate_postgres.sql` is the final consolidated database migration which sets up FTS vector weights, GIN trigram indexes, and pgvector embeddings.
+- `scripts/migrate_postgres_cdc.sql` is the CDC prep migration which configures table replica identity and replication publications.
 - The HNSW index is sparse until `scripts/embed_products.py` runs — `/search/v3` will return only lexical results until embeddings are populated.
 - The repo now includes the first `v2.2` Elastic artifacts:
   - `docs/search-v2-contract.md` freezes `v2` behavior so `v2.2` can match it.

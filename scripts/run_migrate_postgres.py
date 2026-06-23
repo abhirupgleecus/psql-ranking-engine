@@ -1,6 +1,7 @@
-"""Execute the Phase 3 migration script against the database.
+"""Execute the consolidated PostgreSQL migration script against the database.
 
-Enables pgvector, adds the embedding column, and creates the HNSW index.
+Enables pg_trgm and vector, adds the search_vector and embedding columns, and 
+creates all GIN and HNSW indexes for v2 and v3.
 
 asyncpg does not support multi-statement prepared statements, so we
 split the SQL script into individual statements and execute them
@@ -16,11 +17,9 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 from sqlalchemy import text
-
 from app.database import engine
 
-
-MIGRATION_PATH = Path("scripts/migrate_phase3.sql")
+MIGRATION_PATH = Path("scripts/migrate_postgres.sql")
 
 
 def split_sql_statements(script: str) -> list[str]:
@@ -58,10 +57,14 @@ def split_sql_statements(script: str) -> list[str]:
 
 
 async def main() -> None:
+    if not MIGRATION_PATH.exists():
+        print(f"Migration script not found: {MIGRATION_PATH}", file=sys.stderr)
+        sys.exit(1)
+
     script = MIGRATION_PATH.read_text(encoding="utf-8")
     statements = split_sql_statements(script)
 
-    print(f"Executing {len(statements)} SQL statement(s)...")
+    print(f"Executing {len(statements)} SQL statement(s) from {MIGRATION_PATH}...")
 
     async with engine.begin() as conn:
         for i, stmt in enumerate(statements, 1):
@@ -70,52 +73,46 @@ async def main() -> None:
             print(f"  [{i}/{len(statements)}] {first_line}...")
             await conn.execute(text(stmt))
 
-    print("Phase 3 migration executed successfully.")
+    print("PostgreSQL migration executed successfully.")
 
-    # Verify: check vector extension, embedding column, and HNSW index
+    # Verification checks
+    print("\nVerifying database state...")
     async with engine.connect() as conn:
-        # 1. Verify pgvector extension
-        result = await conn.execute(
-            text("SELECT extname FROM pg_extension WHERE extname = 'vector'")
-        )
-        ext = result.first()
-        print(f"vector extension: {ext[0] if ext else 'NOT FOUND'}")
-
-        # 2. Verify embedding column exists
-        result = await conn.execute(
-            text(
-                "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name = 'product_master' AND column_name = 'embedding'"
+        # 1. Verify extensions
+        for ext in ["pg_trgm", "vector"]:
+            result = await conn.execute(
+                text(f"SELECT extname FROM pg_extension WHERE extname = '{ext}'")
             )
-        )
-        col = result.first()
-        print(f"embedding column: {col[0] if col else 'NOT FOUND'}")
+            row = result.first()
+            print(f"  Extension '{ext}': {'INSTALLED' if row else 'NOT FOUND'}")
 
-        # 3. Check how many rows have embeddings (should be 0 initially)
-        result = await conn.execute(
-            text(
-                "SELECT COUNT(*) AS total, "
-                "COUNT(embedding) AS with_embedding "
-                "FROM product_master"
+        # 2. Verify columns
+        for col in ["search_vector", "embedding"]:
+            result = await conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    f"WHERE table_name = 'product_master' AND column_name = '{col}'"
+                )
             )
-        )
-        row = result.first()
-        print(
-            f"rows: {row[0]} total, {row[1]} with embeddings"
-            if row
-            else "no rows found"
-        )
+            row = result.first()
+            print(f"  Column 'product_master.{col}': {'EXISTS' if row else 'NOT FOUND'}")
 
-        # 4. Verify HNSW index
-        result = await conn.execute(
-            text(
-                "SELECT indexname FROM pg_indexes "
-                "WHERE tablename = 'product_master' "
-                "AND indexname = 'idx_product_master_embedding'"
+        # 3. Verify indexes
+        expected_indexes = [
+            "idx_product_master_search_vector",
+            "idx_product_master_model_number_trgm",
+            "idx_product_master_upc_trgm",
+            "idx_product_master_embedding",
+        ]
+        for idx in expected_indexes:
+            result = await conn.execute(
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    f"WHERE tablename = 'product_master' AND indexname = '{idx}'"
+                )
             )
-        )
-        idx = result.first()
-        print(f"HNSW index: {idx[0] if idx else 'NOT FOUND'}")
+            row = result.first()
+            print(f"  Index '{idx}': {'FOUND' if row else 'NOT FOUND'}")
 
 
 if __name__ == "__main__":

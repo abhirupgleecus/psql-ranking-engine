@@ -21,30 +21,10 @@ As of June 22, 2026, planning and repo-prep work for a new Elastic-backed `/sear
 3. Restricted active search results to `ProductStatus.ACTIVE`.
 4. Updated `eval.py` and `test_cases.json` to target the restored `product_master` dataset.
 
-#### Phase 2: Full-text + Wildcard Search (`/search/v2`)
-1. `scripts/migrate_phase2.sql` enables `pg_trgm`, creates `immutable_array_to_string`, adds the generated `search_vector` column, and creates the GIN index.
-2. `app/search_engine_v2.py` normalizes the query into prefix tsquery tokens and falls back to wildcard `ILIKE` search when needed.
-3. `app/routers/search_v2.py` exposes `GET /search/v2`.
-4. `scripts/eval.py` supports `--engine v2`.
-
-#### Phase 2v2: Model Number Search Improvements (`/search/v2`)
-1. `scripts/migrate_phase2_v2.sql` adds a GIN trigram index on `model_number` and reconstructs the `search_vector` generated column with `model_number` promoted from Weight C → B.
-2. `app/search_engine_v2.py` modifies the primary FTS path to match on both `search_vector @@ to_tsquery` and `model_number ILIKE :wildcard` (using GIN trigram index), blending `similarity(model_number, :raw_query)` into the FTS ranking.
-3. `scripts/run_migrate_phase2_v2.py` is the python migration runner.
-
-#### Phase 2v3: UPC ID Search & Search Vector Re-weighting (`/search/v2` & `/search/v3`)
-1. `scripts/migrate_phase2_v3.sql` creates a GIN trigram index on `upc` (`idx_product_master_upc_trgm`) and reconstructs the `search_vector` generated column to apply new weights (Weight A: brand, model_number, upc; Weight B: name, category; Weight C: sub_category, type; Weight D: required_certifications, hazardous_materials).
-2. `app/search_engine_v2.py` incorporates `upc ILIKE :wildcard` into FTS and fallback queries, and blends `coalesce(similarity(upc, :raw_query), 0.0) * 2.0` into the FTS ranking formula.
-3. `scripts/run_migrate_phase2_v3.py` is the python migration runner.
-
-#### Phase 3: Hybrid Search (`/search/v3`)
-1. `scripts/migrate_phase3.sql` enables `vector`, adds `embedding vector(768)`, and creates the HNSW index.
-2. `app/embedding_client.py` wraps Gemini Embedding 2 via `google-genai`.
-3. `scripts/embed_products.py` batch-embeds rows where `embedding IS NULL`.
-4. `app/rrf.py` implements Reciprocal Rank Fusion.
-5. `app/search_engine_v3.py` combines lexical and semantic retrieval, then fuses results with RRF.
-6. `app/routers/search_v3.py` exposes `GET /search/v3`.
-7. `scripts/eval.py` supports `--engine v3`.
+#### Database Migrations (v2, v3, and CDC)
+1. `scripts/migrate_postgres.sql` enables `pg_trgm` and `vector` extensions, creates the generated `search_vector` column with final weights, adds the `embedding` column, and creates GIN and HNSW indexes.
+2. `scripts/migrate_postgres_cdc.sql` sets table replica identity and logical replication publication.
+3. `scripts/run_migrate_postgres.py` and `scripts/run_migrate_postgres_cdc.py` execute and verify these migrations.
 
 ### Verified State
 
@@ -130,22 +110,14 @@ As of June 22, 2026, planning and repo-prep work for a new Elastic-backed `/sear
   - creates the versioned Elastic index and aliases for future `v2.2`
 - `scripts/es/product_master_v2_mapping.json`
   - first checked-in Elastic mapping for the future `v2.2` index
-- `scripts/migrate_phase2.sql`
-  - Phase 2 SQL migration
-- `scripts/migrate_phase2_v2.sql`
-  - Phase 2v2 SQL migration (trigram index + Weight B promotion)
-- `scripts/migrate_phase2_v3.sql`
-  - Phase 2v3 SQL migration (UPC trigram index + field re-weighting)
-- `scripts/migrate_phase3.sql`
-  - Phase 3 SQL migration
-- `scripts/run_migrate_phase2.py`
-  - Python runner for Phase 2
-- `scripts/run_migrate_phase2_v2.py`
-  - Python runner for Phase 2v2
-- `scripts/run_migrate_phase2_v3.py`
-  - Python runner for Phase 2v3
-- `scripts/run_migrate_phase3.py`
-  - Python runner for Phase 3
+- `scripts/migrate_postgres.sql`
+  - Consolidated SQL migration (extensions, generated vector weights, pgvector schema, all indexes)
+- `scripts/migrate_postgres_cdc.sql`
+  - CDC preparation migration (replica identity + replication publication)
+- `scripts/run_migrate_postgres.py`
+  - Python runner for consolidated PostgreSQL migrations
+- `scripts/run_migrate_postgres_cdc.py`
+  - Python runner for CDC preparation migrations
 - `scripts/embed_products.py`
   - batch embedding pipeline for `product_master`
 - `scripts/seed.py`
@@ -233,10 +205,8 @@ $env:PGPASSWORD='password'
 5. Apply Phase 2, Phase 2v2, Phase 2v3, and Phase 3 migrations
 
 ```powershell
-.\.venv\Scripts\python.exe -m scripts.run_migrate_phase2
-.\.venv\Scripts\python.exe -m scripts.run_migrate_phase2_v2
-.\.venv\Scripts\python.exe -m scripts.run_migrate_phase2_v3
-.\.venv\Scripts\python.exe -m scripts.run_migrate_phase3
+.\.venv\Scripts\python.exe -m scripts.run_migrate_postgres
+.\.venv\Scripts\python.exe -m scripts.run_migrate_postgres_cdc
 ```
 
 6. Run the embedding pipeline for v3

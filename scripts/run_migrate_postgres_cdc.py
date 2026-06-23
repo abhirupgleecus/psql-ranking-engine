@@ -1,7 +1,6 @@
-"""Execute the Phase 2v2 migration script against the database.
+"""Execute the PostgreSQL CDC prep migration script against the database.
 
-Adds the GIN trigram index on model_number and promotes model_number to Weight B
-in the search_vector generated column.
+Sets replica identity and creates the logical replication publication.
 """
 
 import asyncio
@@ -15,7 +14,7 @@ sys.path.insert(0, str(project_root))
 from sqlalchemy import text
 from app.database import engine
 
-MIGRATION_PATH = Path("scripts/migrate_phase2_v2.sql")
+MIGRATION_PATH = Path("scripts/migrate_postgres_cdc.sql")
 
 
 def split_sql_statements(script: str) -> list[str]:
@@ -53,10 +52,14 @@ def split_sql_statements(script: str) -> list[str]:
 
 
 async def main() -> None:
+    if not MIGRATION_PATH.exists():
+        print(f"Migration script not found: {MIGRATION_PATH}", file=sys.stderr)
+        sys.exit(1)
+
     script = MIGRATION_PATH.read_text(encoding="utf-8")
     statements = split_sql_statements(script)
 
-    print(f"Executing {len(statements)} SQL statement(s)...")
+    print(f"Executing {len(statements)} SQL statement(s) from {MIGRATION_PATH}...")
 
     async with engine.begin() as conn:
         for i, stmt in enumerate(statements, 1):
@@ -65,48 +68,35 @@ async def main() -> None:
             print(f"  [{i}/{len(statements)}] {first_line}...")
             await conn.execute(text(stmt))
 
-    print("Phase 2v2 migration executed successfully.")
+    print("PostgreSQL CDC prep migration executed successfully.")
 
-    # Verify: check search_vector column exists, is populated, and index/trgm index exist.
+    # Verification checks
+    print("\nVerifying database state...")
     async with engine.connect() as conn:
-        # 1. Verify pg_trgm extension
-        result = await conn.execute(
-            text("SELECT extname FROM pg_extension WHERE extname = 'pg_trgm'")
-        )
-        ext = result.first()
-        print(f"pg_trgm extension: {ext[0] if ext else 'NOT FOUND'}")
-
-        # 2. Verify model_number trigram index exists
+        # 1. Verify replica identity on product_master
         result = await conn.execute(
             text(
-                "SELECT indexname FROM pg_indexes "
-                "WHERE tablename = 'product_master' "
-                "AND indexname = 'idx_product_master_model_number_trgm'"
-            )
-        )
-        idx_trgm = result.first()
-        print(f"model_number trigram index: {idx_trgm[0] if idx_trgm else 'NOT FOUND'}")
-
-        # 3. Verify search_vector is populated
-        result = await conn.execute(
-            text(
-                "SELECT search_vector IS NOT NULL AS has_vector "
-                "FROM product_master LIMIT 1"
+                "SELECT relreplident "
+                "FROM pg_class c "
+                "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "WHERE n.nspname = 'public' AND c.relname = 'product_master';"
             )
         )
         row = result.first()
-        print(f"search_vector populated: {row[0] if row else 'no rows'}")
+        if row:
+            # Relreplident options: d = default, n = nothing, f = full, i = index
+            identity_char = row[0]
+            identity_map = {'d': 'default', 'n': 'nothing', 'f': 'full', 'i': 'index'}
+            print(f"  Replica Identity of 'product_master': {identity_map.get(identity_char, identity_char)}")
+        else:
+            print("  Table 'product_master' NOT FOUND")
 
-        # 4. Verify search_vector index exists
+        # 2. Verify publication exists
         result = await conn.execute(
-            text(
-                "SELECT indexname FROM pg_indexes "
-                "WHERE tablename = 'product_master' "
-                "AND indexname = 'idx_product_master_search_vector'"
-            )
+            text("SELECT pubname FROM pg_publication WHERE pubname = 'dbz_pub_product_master_v2';")
         )
-        idx_search = result.first()
-        print(f"search_vector index: {idx_search[0] if idx_search else 'NOT FOUND'}")
+        row = result.first()
+        print(f"  Publication 'dbz_pub_product_master_v2': {'FOUND' if row else 'NOT FOUND'}")
 
 
 if __name__ == "__main__":
