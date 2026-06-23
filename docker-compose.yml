@@ -1,4 +1,11 @@
 services:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # LOCAL DEVELOPMENT DATABASE
+  # pgvector-enabled PostgreSQL for running v1/v2/v3 locally.
+  # NOTE: Application .env now points to Cloud SQL (34.47.153.20:5432/ranking_poc).
+  #       This container is kept for local development and testing only.
+  # ─────────────────────────────────────────────────────────────────────────────
   postgres:
     image: pgvector/pgvector:pg17
     container_name: psql-ranking-poc-db
@@ -15,6 +22,180 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # pgAdmin 4 — database management UI
+  # http://localhost:5050  (admin@admin.com / admin)
+  # ─────────────────────────────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: psql-ranking-poc-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Zookeeper — Kafka coordination service
+  # ─────────────────────────────────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Kafka — message bus between Debezium source and Elasticsearch sink
+  # Internal listener: kafka:29092  (container-to-container)
+  # External listener: localhost:9092  (host tools, e.g. kafka-topics CLI)
+  # ─────────────────────────────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_MESSAGE_MAX_BYTES: 5242880
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list 2>/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Kafka Connect — unified CDC worker (Debezium source + Elasticsearch sink)
+  #
+  # Built from infra/docker/kafka-connect/Dockerfile, which extends
+  # debezium/connect:2.4 with the Confluent Elasticsearch Sink plugin.
+  #
+  # Connector configs are mounted read-only from infra/cdc/ and can be
+  # registered via the REST API at http://localhost:8083.
+  #
+  # Env-var interpolation (${env:VAR}) is enabled for all connector configs
+  # via the EnvVarConfigProvider — credentials never need to be hardcoded
+  # in the JSON connector definitions.
+  #
+  # REST API: http://localhost:8083/connectors
+  # ─────────────────────────────────────────────────────────────────────────────
+  kafka-connect:
+    build:
+      context: ./infra/docker/kafka-connect
+      dockerfile: Dockerfile
+    image: psql-ranking-poc-kafka-connect:latest
+    container_name: debezium
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    environment:
+      # ── Kafka Connect framework (cp-kafka-connect requires CONNECT_ prefix) ────
+      CONNECT_BOOTSTRAP_SERVERS: kafka:29092
+      CONNECT_GROUP_ID: psql-ranking-poc-connect
+      CONNECT_CONFIG_STORAGE_TOPIC: psql_ranking_poc.connect_configs
+      CONNECT_OFFSET_STORAGE_TOPIC: psql_ranking_poc.connect_offsets
+      CONNECT_STATUS_STORAGE_TOPIC: psql_ranking_poc.connect_statuses
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+      CONNECT_REST_PORT: "8083"
+      # ── Plugin path — confluent-hub installs to this location ──────────────────
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+      # ── Config providers (enables ${env:VAR} in connector JSON configs) ────────
+      CONNECT_CONFIG_PROVIDERS: env
+      CONNECT_CONFIG_PROVIDERS_ENV_CLASS: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+      # ── Cloud SQL source (Debezium PostgreSQL connector) ───────────────────────
+      CLOUD_SQL_HOST: 34.47.153.20
+      CLOUD_SQL_PORT: "5432"
+      CLOUD_SQL_USER: app_user
+      CLOUD_SQL_PASSWORD: "Gleecus123"
+      CLOUD_SQL_DBNAME: ranking_poc
+      # ── Elastic Cloud sink (values pulled from .env file) ─────────────────────
+      ELASTIC_URL: ${ELASTIC_URL:-}
+      ELASTIC_USERNAME: ${ELASTIC_USERNAME:-}
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
+      ELASTIC_API_KEY: ${ELASTIC_API_KEY:-}
+      ELASTIC_V2_INDEX_WRITE_ALIAS: ${ELASTIC_V2_INDEX_WRITE_ALIAS:-product_master_v2_write}
+    volumes:
+      - ./infra/cdc:/config:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # FastAPI backend — psql-ranking-poc API
+  # http://localhost:8001        → API root
+  # http://localhost:8001/docs   → Swagger UI
+  #
+  # Hot-reload is enabled in dev: edit files in app/ and changes apply live.
+  # The .env file is loaded by docker-compose and passed through env_file.
+  # ─────────────────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: psql-ranking-poc-api:latest
+    container_name: psql-ranking-poc-api
+    env_file:
+      - .env
+    ports:
+      - "8001:8001"
+    volumes:
+      # Mount source for hot-reload (dev only); remove in production
+      - ./app:/app/app:ro
+    depends_on:
+      kafka-connect:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8001/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
 
 volumes:
   pgvector_data:
+  pgadmin_data:
+  zookeeper_data:
+  zookeeper_log:
+  kafka_data:

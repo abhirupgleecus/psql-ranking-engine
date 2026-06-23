@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# IDE / tooling
+.vscode/
+.agents/
+.claude/
+
+# Secrets & local config (injected at runtime via env_file)
+.env
+.env.*
+
+# Docs & scripts (not needed in the image)
+docs/
+scripts/
+migrations/
+tests/
+infra/
+
+# Misc
+*.md
+*.log
