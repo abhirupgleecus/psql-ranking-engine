@@ -6,6 +6,7 @@ from sqlalchemy import text
 from app.database import engine
 from app.routers.search import router as search_router
 from app.routers.search_v2 import router as search_v2_router
+from app.routers.search_v2_2 import router as search_v2_2_router
 from app.routers.search_v3 import router as search_v3_router
 
 
@@ -24,6 +25,7 @@ app = FastAPI(
 
 app.include_router(search_router)
 app.include_router(search_v2_router)
+app.include_router(search_v2_2_router)
 app.include_router(search_v3_router)
 
 
