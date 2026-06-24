@@ -6,42 +6,42 @@ services:
   # NOTE: Application .env now points to Cloud SQL (34.47.153.20:5432/ranking_poc).
   #       This container is kept for local development and testing only.
   # ─────────────────────────────────────────────────────────────────────────────
-  postgres:
-    image: pgvector/pgvector:pg17
-    container_name: psql-ranking-poc-db
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: psql_ranking_poc
-    ports:
-      - "5433:5432"
-    volumes:
-      - pgvector_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d psql_ranking_poc"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+  # postgres:
+  #   image: pgvector/pgvector:pg17
+  #   container_name: psql-ranking-poc-db
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: password
+  #     POSTGRES_DB: psql_ranking_poc
+  #   ports:
+  #     - "5433:5432"
+  #   volumes:
+  #     - pgvector_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres -d psql_ranking_poc"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+  #   restart: unless-stopped
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # pgAdmin 4 — database management UI
-  # http://localhost:5050  (admin@admin.com / admin)
-  # ─────────────────────────────────────────────────────────────────────────────
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: psql-ranking-poc-pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
+  # # ─────────────────────────────────────────────────────────────────────────────
+  # # pgAdmin 4 — database management UI
+  # # http://localhost:5050  (admin@admin.com / admin)
+  # # ─────────────────────────────────────────────────────────────────────────────
+  # pgadmin:
+  #   image: dpage/pgadmin4:latest
+  #   container_name: psql-ranking-poc-pgadmin
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: admin@admin.com
+  #     PGADMIN_DEFAULT_PASSWORD: admin
+  #   ports:
+  #     - "5050:80"
+  #   volumes:
+  #     - pgadmin_data:/var/lib/pgadmin
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Zookeeper — Kafka coordination service
@@ -194,8 +194,8 @@ services:
     restart: unless-stopped
 
 volumes:
-  pgvector_data:
-  pgadmin_data:
+  # pgvector_data:
+  # pgadmin_data:
   zookeeper_data:
   zookeeper_log:
   kafka_data:
