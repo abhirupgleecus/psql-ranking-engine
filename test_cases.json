@@ -4,83 +4,95 @@
     "expected_top3_uuids": [
       "2f61910e-6656-4bb0-8995-ad10a2d17b25"
     ],
-    "description": "Whitespace-trimmed exact large-format printer name match"
+    "description": "Whitespace-trimmed exact large-format printer name match",
+    "category": null
   },
   {
     "query": "hp neverstop laser 1000n monochrome laser printer",
     "expected_top3_uuids": [
       "8748b1b5-f2f7-46b7-b417-5b7522e52020"
     ],
-    "description": "Lowercase exact monochrome printer query"
+    "description": "Lowercase exact monochrome printer query",
+    "category": null
   },
   {
     "query": "HP DesignJet Studio Steel 24-in Large Format Wireless Plotter Printer",
     "expected_top3_uuids": [
       "d659a888-1afe-411d-b8da-d6889263eac6"
     ],
-    "description": "Exact wireless plotter printer query"
+    "description": "Exact wireless plotter printer query",
+    "category": null
   },
   {
     "query": "HP DesignJet T230 24-in Large Format Plotter Printer",
     "expected_top3_uuids": [
       "0d6f7ce6-6004-47db-98ce-fea7de4fe9cc"
     ],
-    "description": "Exact DesignJet plotter query"
+    "description": "Exact DesignJet plotter query",
+    "category": null
   },
   {
     "query": "HP Pavilion 15 Laptop (15-eg0050wm)",
     "expected_top3_uuids": [
       "31599cae-55c1-463a-b256-80f1b5fcd041"
     ],
-    "description": "Exact Pavilion laptop name match"
+    "description": "Exact Pavilion laptop name match",
+    "category": null
   },
   {
     "query": "HP Laptop 15-dw Series",
     "expected_top3_uuids": [
       "86e72716-2151-47d7-91e9-d0fe73988790"
     ],
-    "description": "Exact HP laptop series query"
+    "description": "Exact HP laptop series query",
+    "category": null
   },
   {
     "query": "HP Color LaserJet Pro 4201dw Wireless Color Laser Printer",
     "expected_top3_uuids": [
       "b9ca619c-1828-4593-900c-582d17720457"
     ],
-    "description": "Exact wireless color LaserJet query"
+    "description": "Exact wireless color LaserJet query",
+    "category": null
   },
   {
     "query": "HP M27h FHD Monitor",
     "expected_top3_uuids": [
       "17942b12-b1cb-49b9-a48a-95876935a878"
     ],
-    "description": "Exact monitor product query"
+    "description": "Exact monitor product query",
+    "category": null
   },
   {
     "query": "HP Z2 G9 Small Form Factor Workstation",
     "expected_top3_uuids": [
       "0e735249-018d-4e5b-8059-243d897556de"
     ],
-    "description": "Exact workstation query"
+    "description": "Exact workstation query",
+    "category": null
   },
   {
     "query": "HP LaserJet M110we Wireless Black & White Laser Printer",
     "expected_top3_uuids": [
       "384d4294-185b-4615-8437-c085b70cdf07"
     ],
-    "description": "Exact wireless black-and-white printer query"
+    "description": "Exact wireless black-and-white printer query",
+    "category": null
   },
   {
     "query": "HP Victus 15.6\" Gaming Laptop (AMD Ryzen 5 7535HS, RTX 2050, 8GB RAM, 512GB SSD)",
     "expected_top3_uuids": [
       "409b2eab-ec5b-4f3f-957a-9292e83b731f"
     ],
-    "description": "Exact gaming laptop query"
+    "description": "Exact gaming laptop query",
+    "category": null
   },
   {
     "query": "hp all-in-one 24 desktop pc a24hta",
     "expected_top3_uuids": [
       "0a5c613b-b296-451d-9fe4-e0a3c3b042a1"
     ],
-    "description": "Lowercase exact all-in-one desktop query"
+    "description": "Lowercase exact all-in-one desktop query",
+    "category": null
   }
 ]
