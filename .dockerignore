@@ -31,7 +31,6 @@ docker-compose.yml
 
 # Docs & scripts (not needed in the image)
 docs/
-scripts/
 migrations/
 tests/
 infra/
