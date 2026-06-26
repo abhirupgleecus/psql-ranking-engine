@@ -118,8 +118,7 @@
         }
       },
       "manufacturer": {
-        "type": "object",
-        "enabled": true
+        "type": "text"
       },
       "upc": {
         "type": "keyword",
@@ -161,16 +160,16 @@
         "type": "integer"
       },
       "weight_lb": {
-        "type": "float"
+        "type": "keyword"
       },
       "weight_kg": {
-        "type": "float"
+        "type": "keyword"
       },
       "dimensions_inches": {
         "type": "keyword"
       },
       "repairability_score": {
-        "type": "float"
+        "type": "keyword"
       },
       "disassembly_complexity": {
         "type": "keyword"
@@ -209,12 +208,10 @@
         }
       },
       "market_value": {
-        "type": "object",
-        "enabled": true
+        "type": "text"
       },
       "market_value_avgs": {
-        "type": "object",
-        "enabled": true
+        "type": "text"
       },
       "hazardous_materials": {
         "type": "text",
@@ -226,8 +223,7 @@
         }
       },
       "additional_data": {
-        "type": "object",
-        "enabled": true
+        "type": "text"
       },
       "created_at": {
         "type": "date"
