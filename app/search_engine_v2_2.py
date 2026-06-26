@@ -22,6 +22,8 @@ Graceful degradation:
 
 from __future__ import annotations
 
+import base64
+import json
 from typing import Any
 
 from app.database import settings
@@ -152,14 +154,37 @@ def _build_fallback_query(
 
 def _hit_to_dict(hit: dict[str, Any], search_mode: str) -> dict[str, Any]:
     """Convert a raw Elasticsearch hit into the dict shape expected by
-    RankedProductMasterV2."""
+    RankedProductMasterV2.
+
+    Debezium serializes PostgreSQL JSONB columns as plain JSON strings and
+    some numeric/binary columns as base64.  We decode them here so that
+    downstream Pydantic models see the expected native Python types.
+    """
 
     source: dict[str, Any] = hit["_source"]
     score: float = float(hit.get("_score") or 0.0)
 
     doc = dict(source)
 
-    # Derived fields
+    # ── Deserialize JSONB fields (arrive as JSON strings from Debezium) ──────
+    for field in ("market_value", "market_value_avgs", "additional_data", "manufacturer"):
+        val = doc.get(field)
+        if isinstance(val, str):
+            try:
+                doc[field] = json.loads(val)
+            except (json.JSONDecodeError, TypeError):
+                doc[field] = None
+
+    # ── Decode base64-encoded numeric fields ─────────────────────────────────
+    for field in ("weight_lb", "weight_kg", "repairability_score"):
+        val = doc.get(field)
+        if isinstance(val, str):
+            try:
+                doc[field] = float(base64.b64decode(val).decode("utf-8").strip())
+            except Exception:
+                doc[field] = None
+
+    # ── Derived fields ────────────────────────────────────────────────────────
     doc["search_score"] = score
     doc["search_mode"] = search_mode
 
