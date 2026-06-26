@@ -22,7 +22,7 @@
     "transforms": "dropMeta",
     "transforms.dropMeta.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
     "transforms.dropMeta.exclude": "__op,__table,__lsn,__source_ts_ms,__deleted",
-    "errors.tolerance": "none",
+    "errors.tolerance": "all",
     "errors.deadletterqueue.topic.name": "dlq.product_master_v2.elasticsearch",
     "errors.deadletterqueue.context.headers.enable": "true",
     "errors.log.enable": "true",
