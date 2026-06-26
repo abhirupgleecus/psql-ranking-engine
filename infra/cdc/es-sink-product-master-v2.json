@@ -27,6 +27,7 @@
     "errors.deadletterqueue.topic.name": "dlq.product_master_v2.elasticsearch",
     "errors.deadletterqueue.context.headers.enable": "true",
     "errors.log.enable": "true",
-    "errors.log.include.messages": "true"
+    "errors.log.include.messages": "true",
+    "errors.deadletterqueue.topic.replication.factor": "1"
   }
 }
