@@ -37,10 +37,7 @@ def _build_auth_kwargs() -> dict[str, Any]:
             )
         }
 
-    raise RuntimeError(
-        "Elastic credentials are not configured. Set ELASTIC_API_KEY or both "
-        "ELASTIC_USERNAME and ELASTIC_PASSWORD."
-    )
+    return {}
 
 
 def create_async_elasticsearch_client():

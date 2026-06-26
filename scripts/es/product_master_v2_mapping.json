@@ -6,6 +6,7 @@
     }
   },
   "settings": {
+    "index.max_ngram_diff": 18,
     "analysis": {
       "normalizer": {
         "v2_lowercase_normalizer": {

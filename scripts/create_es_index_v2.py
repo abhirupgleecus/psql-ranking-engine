@@ -43,9 +43,10 @@ def _load_mapping(index_name: str) -> bytes:
     return json.dumps(payload, indent=2).encode("utf-8")
 
 
-def _perform_request(method: str, url: str, api_key: str, body: bytes | None = None) -> tuple[int, str]:
+def _perform_request(method: str, url: str, api_key: str | None, body: bytes | None = None) -> tuple[int, str]:
     req = request.Request(url=url, data=body, method=method)
-    req.add_header("Authorization", f"ApiKey {api_key}")
+    if api_key:
+        req.add_header("Authorization", f"ApiKey {api_key}")
     req.add_header("Content-Type", "application/json")
 
     try:
@@ -59,7 +60,7 @@ def _perform_request(method: str, url: str, api_key: str, body: bytes | None = N
 def main() -> int:
     try:
         elastic_url = _require_env("ELASTIC_URL").rstrip("/")
-        api_key = _require_env("ELASTIC_API_KEY")
+        api_key = os.getenv("ELASTIC_API_KEY")
         index_name = os.getenv("ELASTIC_V2_INDEX_NAME", DEFAULT_INDEX_NAME)
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
