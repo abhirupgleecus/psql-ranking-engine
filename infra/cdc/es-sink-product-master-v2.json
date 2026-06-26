@@ -9,7 +9,7 @@
     "schema.ignore": "true",
     "compact.map.entries": "true",
     "behavior.on.null.values": "DELETE",
-    "behavior.on.malformed.documents": "FAIL",
+    "behavior.on.malformed.documents": "IGNORE",
     "write.method": "UPSERT",
     "max.in.flight.requests": "1",
     "batch.size": "500",
