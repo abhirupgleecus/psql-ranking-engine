@@ -77,26 +77,72 @@ def _parse_pg_vector(raw: str) -> list[float]:
     return [float(x) for x in raw.strip("[]").split(",")]
 
 
+async def build_uuid_to_es_id_map(client, index: str) -> dict[str, str]:
+    """Scroll through all Elasticsearch documents to map uuid -> ES _id.
+
+    Necessary because under key.ignore: true, the ES _id is coordinates
+    (topic+partition+offset) rather than the product UUID.
+    """
+    logger.info("Building UUID-to-ES-ID mapping from Elasticsearch index...")
+    uuid_to_es_id = {}
+
+    resp = await client.search(
+        index=index,
+        scroll="2m",
+        size=5000,
+        _source=["uuid"]
+    )
+    scroll_id = resp.get("_scroll_id")
+    hits = resp["hits"]["hits"]
+
+    try:
+        while hits:
+            for hit in hits:
+                uuid_str = hit["_source"].get("uuid")
+                if uuid_str:
+                    uuid_to_es_id[uuid_str] = hit["_id"]
+
+            resp = await client.scroll(scroll_id=scroll_id, scroll="2m")
+            scroll_id = resp.get("_scroll_id")
+            hits = resp["hits"]["hits"]
+    finally:
+        if scroll_id:
+            await client.clear_scroll(scroll_id=scroll_id)
+
+    logger.info("Mapping built: %d documents found in ES", len(uuid_to_es_id))
+    return uuid_to_es_id
+
+
 async def bulk_update_es(
     client,
     index: str,
     rows: list[dict],
+    uuid_to_es_id: dict[str, str],
 ) -> tuple[int, int]:
     """Send a bulk _update request to inject embedding vectors.
 
     Returns (success_count, error_count).
     """
     operations = []
+    skipped_count = 0
     for row in rows:
         uuid = str(row["uuid"])
+        es_id = uuid_to_es_id.get(uuid)
+        if not es_id:
+            logger.warning("UUID %s not found in Elasticsearch index mapping", uuid)
+            skipped_count += 1
+            continue
         vector = _parse_pg_vector(row["embedding"])
-        operations.append(json.dumps({"update": {"_index": index, "_id": uuid}}))
+        operations.append(json.dumps({"update": {"_index": index, "_id": es_id}}))
         operations.append(json.dumps({"doc": {"embedding": vector}, "doc_as_upsert": False}))
+
+    if not operations:
+        return 0, skipped_count
 
     body = "\n".join(operations) + "\n"
     resp = await client.bulk(body=body)
 
-    errors = 0
+    errors = skipped_count
     for item in resp.get("items", []):
         op = item.get("update", {})
         if op.get("error"):
@@ -139,13 +185,15 @@ async def main(batch_size: int) -> None:
     start_time = time.time()
 
     try:
+        uuid_to_es_id = await build_uuid_to_es_id_map(client, index)
+
         while True:
             rows = await fetch_pg_embeddings(offset=offset, limit=batch_size)
             if not rows:
                 break
 
             batch_num += 1
-            success, errors = await bulk_update_es(client, index, rows)
+            success, errors = await bulk_update_es(client, index, rows, uuid_to_es_id)
             total_success += success
             total_errors += errors
             offset += len(rows)
