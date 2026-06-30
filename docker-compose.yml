@@ -184,6 +184,7 @@ services:
     volumes:
       # Mount source for hot-reload (dev only); remove in production
       - ./app:/app/app:ro
+      - ./scripts:/app/scripts:ro
     depends_on:
       kafka-connect:
         condition: service_healthy

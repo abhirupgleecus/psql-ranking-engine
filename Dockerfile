@@ -16,8 +16,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application source
+# Copy application source and scripts
 COPY app/ ./app/
+COPY scripts/ ./scripts/
 
 # Expose the API port
 EXPOSE 8001
