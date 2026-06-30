@@ -105,6 +105,7 @@ def _build_hybrid_body(
                         "knn": {
                             "field": "embedding",
                             "query_vector": query_vector,
+                            "k": candidate_pool_size,
                             "num_candidates": candidate_pool_size,
                             "filter": knn_filter,
                         }
