@@ -22,7 +22,7 @@ async def search_v2_3(
     q: str = Query(..., min_length=1, description="Search query"),
     top_n: int = Query(default=10, ge=1, le=100, description="Number of results to return"),
     candidate_multiplier: int = Query(
-        default=4,
+        default=10,
         ge=1,
         le=20,
         description="Multiplier for KNN num_candidates and rrf rank_window_size (top_n × multiplier)",

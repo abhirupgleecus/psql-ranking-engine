@@ -53,7 +53,7 @@ def main():
             category = case.get("category")
             description = case.get("description", "")
 
-            params = {"q": query, "top_n": 10}
+            params = {"q": query, "top_n": 10, "candidate_multiplier": 10}
             if category is not None:
                 params["category"] = category
 

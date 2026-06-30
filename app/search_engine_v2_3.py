@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _BOOST_UPC_EXACT = 30.0
 _BOOST_MODEL_EXACT = 25.0
+_BOOST_NAME_PHRASE = 20.0   # exact phrase match on full name
 _BOOST_UPC_TEXT = 12.0
 _BOOST_MODEL_TEXT = 10.0
 _BOOST_UPC_PARTIAL = 8.0
@@ -55,8 +56,14 @@ def _build_lexical_bool_query(q: str, category: str | None) -> dict[str, Any]:
         must_filters.append({"term": {"category.keyword": category}})
 
     should_clauses: list[dict[str, Any]] = [
+        # Exact term match on UPC / model_number (full query as single token)
         {"term": {"upc": {"value": q, "boost": _BOOST_UPC_EXACT}}},
         {"term": {"model_number": {"value": q, "boost": _BOOST_MODEL_EXACT}}},
+        # Exact phrase match on name — rewards documents whose name contains the
+        # full query as a verbatim phrase (highest single-field signal for
+        # long exact-product-name queries)
+        {"match_phrase": {"name": {"query": q, "boost": _BOOST_NAME_PHRASE}}},
+        # Token-level text matches
         {"match": {"upc.text": {"query": q, "boost": _BOOST_UPC_TEXT}}},
         {"match": {"model_number.text": {"query": q, "boost": _BOOST_MODEL_TEXT}}},
         {"match": {"upc.partial": {"query": q, "boost": _BOOST_UPC_PARTIAL}}},
