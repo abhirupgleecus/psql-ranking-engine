@@ -21,6 +21,7 @@ Graceful degradation:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -183,6 +184,43 @@ def _hit_to_dict(hit: dict[str, Any], search_mode: str) -> dict[str, Any]:
 
     return doc
 
+async def _get_exact_pin(
+    client,
+    index: str,
+    q: str,
+) -> dict[str, Any] | None:
+    """Fire a high-precision exact-match query concurrently with the hybrid search.
+
+    Returns the single ES hit if EXACTLY ONE active document matches the
+    query via match_phrase or AND-operator on the name field — the two most
+    discriminative signals for verbatim product-name and embedded-model-number
+    queries.  Returns None when zero or more than one document matches
+    (i.e. the query is ambiguous and pinning is not safe).
+    """
+    pin_body = {
+        "query": {
+            "bool": {
+                "filter": [{"term": {"status": "ACTIVE"}}],
+                "should": [
+                    {"match_phrase": {"name": {"query": q}}},
+                    {"match": {"name": {"query": q, "operator": "and"}}},
+                ],
+                "minimum_should_match": 1,
+            }
+        },
+        "size": 5,
+        "_source": True,
+    }
+    try:
+        resp = await client.search(index=index, body=pin_body)
+        hits = resp["hits"]["hits"]
+        if len(hits) == 1:
+            logger.debug("Exact pin found: %s", hits[0]["_source"].get("uuid"))
+            return hits[0]
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Pin check failed (non-critical): %s", exc)
+    return None
+
 
 async def search_products_v2_3(
     q: str,
@@ -243,8 +281,30 @@ async def search_products_v2_3(
             body = _build_lexical_only_body(q=q, category=category, top_n=top_n)
             search_mode = "lexical"
 
-        resp = await client.search(index=index, body=body)
+        resp, pin_hit = await asyncio.gather(
+            client.search(index=index, body=body),
+            _get_exact_pin(client, index, q),
+        )
         hits: list[dict[str, Any]] = resp["hits"]["hits"]
+
+        # ── 3. Exact-match injection (pin) ────────────────────────────────────
+        # Native RRF gives equal weight to both retrievers, so a product that
+        # scores rank-1 in BM25 but ranks poorly in KNN can be outscored by
+        # products that score moderately in *both* retrievers.  When the pin
+        # check returns exactly one high-confidence match (verbatim phrase or
+        # all-token AND) and that match is not already in the top-3, we inject
+        # it at position 0 to preserve the BM25 exact-match signal.
+        if pin_hit is not None:
+            pin_uuid = str(pin_hit["_source"].get("uuid", ""))
+            top3_uuids = {str(h["_source"].get("uuid", "")) for h in hits[:3]}
+            if pin_uuid not in top3_uuids:
+                logger.debug(
+                    "Injecting pin %s at position 0 (not in top-3 of RRF results)",
+                    pin_uuid,
+                )
+                hits = [h for h in hits if str(h["_source"].get("uuid", "")) != pin_uuid]
+                hits.insert(0, pin_hit)
+                hits = hits[:top_n]
 
         results = [_hit_to_dict(h, search_mode) for h in hits]
         return results, search_mode
