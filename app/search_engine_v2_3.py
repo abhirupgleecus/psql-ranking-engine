@@ -57,8 +57,9 @@ def _build_lexical_bool_query(q: str, category: str | None) -> dict[str, Any]:
 
     should_clauses: list[dict[str, Any]] = [
         # Exact term match on UPC / model_number (full query as single token)
-        {"term": {"upc": {"value": q, "boost": _BOOST_UPC_EXACT}}},
-        {"term": {"model_number": {"value": q, "boost": _BOOST_MODEL_EXACT}}},
+        # case_insensitive=true handles lowercase queries against uppercase stored values
+        {"term": {"upc": {"value": q, "boost": _BOOST_UPC_EXACT, "case_insensitive": True}}},
+        {"term": {"model_number": {"value": q, "boost": _BOOST_MODEL_EXACT, "case_insensitive": True}}},
         # Exact phrase match on name — rewards documents whose name contains the
         # full query as a verbatim phrase (highest single-field signal for
         # long exact-product-name queries)
