@@ -64,6 +64,10 @@ def _build_lexical_bool_query(q: str, category: str | None) -> dict[str, Any]:
         # full query as a verbatim phrase (highest single-field signal for
         # long exact-product-name queries)
         {"match_phrase": {"name": {"query": q, "boost": _BOOST_NAME_PHRASE}}},
+        # AND-operator match on name — rewards documents that contain ALL query
+        # tokens (including rare model-number tokens embedded in the query like
+        # "a24hta"). Gives a decisive rank-1 BM25 signal that survives RRF fusion.
+        {"match": {"name": {"query": q, "operator": "and", "boost": _BOOST_NAME_PHRASE}}},
         # Token-level text matches
         {"match": {"upc.text": {"query": q, "boost": _BOOST_UPC_TEXT}}},
         {"match": {"model_number.text": {"query": q, "boost": _BOOST_MODEL_TEXT}}},
